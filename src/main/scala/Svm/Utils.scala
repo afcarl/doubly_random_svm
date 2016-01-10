@@ -2,14 +2,12 @@ package Svm
 
 import breeze.linalg._
 import breeze.numerics.sqrt
-import breeze.plot._
 import breeze.stats.distributions.MultivariateGaussian
 
-import scala.util.Random
 import breeze.plot._
 import breeze.numerics.exp
 /**
-  * Created by owner on 1/8/16.
+  * Created by nikolaas steenbergen on 1/8/16.
   */
 object Utils {
 
@@ -22,23 +20,7 @@ object Utils {
     * @param X
     */
 
-
-  // gaussian kernel
-  //  from https://github.com/scalanlp/breeze-examples/blob/master/src/main/scala/breeze/classify/GaussianKernelSVM.scala
-  //TODO: make this matrix computation
-  // gaussian kernel
-  def gaussianKernel(x1: DenseVector[Double], x2: DenseVector[Double],sigma: Double): Double = {
-    val diff = (x1 - x2)
-    math.exp(-diff.dot(diff)/(2 * sigma * sigma))
-  }
-  // gaussian kernel
-  //  from https://github.com/scalanlp/breeze-examples/blob/master/src/main/scala/breeze/classify/GaussianKernelSVM.scala
-  //TODO: make this matrix computation
-  // gaussian kernel
   def gaussianKernel(x1: DenseVector[Double], x2: DenseMatrix[Double],sigma: Double): DenseVector[Double] = {
-//    X1 = [1],[1],[1]
-//    X2 = [1,1,1,1],[1,-1,-1,1],[1,-1,1-1]
-//    K = [0,2.8284,2,2]
 
     assert(x1.length == x2.rows)
     var i = 0
@@ -48,7 +30,6 @@ object Utils {
       i += 1
     }
 
-//    val diff = (x1 :- x2)
     var difff = - (diff :* diff)
 
     var denominator = 2 * sigma * sigma
@@ -59,77 +40,37 @@ object Utils {
     ret
   }
 
-  def gaussianKernel_all(x1:DenseVector[Double],X: DenseMatrix[Double],sigma : Double): DenseVector[Double] = {
-    var N: Int = X.cols;
-    var dists: DenseVector[Double] = DenseVector.zeros[Double](N)
-
-    var i = 0;
-    while(i < N){
-      dists(i) = gaussianKernel(x1,X(::,i),sigma)
-      i += 1
-    }
-
-    return dists
-  }
-  /**
-    * one point distance assuming gaussian kernel
-    * @param x
-    * @param xt
-    * @param sigma
-    * @return
-    */
-  def predict_svm_kernel_one(x: DenseVector[Double],xt: DenseVector[Double], sigma: Double): Double = {
-    var gaussdist: Double = gaussianKernel(x,xt,sigma)
-    return gaussdist
-  }
 
   def predict_svm_kernel_all(x: DenseVector[Double],X: DenseMatrix[Double], W: DenseVector[Double], sigma: Double): Double = {
-    var N: Int = X.cols
-//    var gaussdists: DenseVector[Double] = DenseVector.ones[Double] (N)
-//
-//    var i: Int = 0
-//    while(i < N){
-//      gaussdists(i) = predict_svm_kernel_one(x,X(::,i),sigma)
-//      i += 1
-//    }
-
-
-    ///TODO: tis wrong
-//    var ret = W.dot(gaussdists)
-
     var ret = W.t * gaussianKernel(x,X,sigma)
-//    assert(ret.cols == 1,ret.rows == 1)
-//    var ret_D: Double = ret(0,0)
-//    var ret = W.dot(g)
-    // TODO: check
     return ret
   }
 
-//  /**
-//    *
-//  def fit_svm_kernel(W,X,Y,its=100,eta=1.,C=.1,kernel=(GaussianKernel,(1.)),visualize=False):
-//    D,N = X.shape[0],X.shape[1]
-//    X = sp.vstack((sp.ones((1,N)),X))
-//
-//    errors_std_loc = []
-//    for it in range(its):
-//      errors_std_loc.append(test_svm(X,Y,W,kernel)[0])
-//      if visualize:
-//        #print "discount:",discount
-//        plot(errors_std_loc)
-//
-//      rn = sp.random.randint(N)
-//      yhat = predict_svm_kernel(X[:,rn],X,W,kernel)
-//      discount = eta/(it+1.)
-//      if yhat*Y[:,rn] > 1: G = C * W
-//      else: G = C * W - Y[:,rn] * kernel[0](sp.vstack((X[:,rn] )),X,kernel[1]).flatten()
-//
-//      W -= discount * G
-//    return W,errors_std_loc
-//
-//    * @param X
-//    */
-//
+  /**
+    *
+  def fit_svm_kernel(W,X,Y,its=100,eta=1.,C=.1,kernel=(GaussianKernel,(1.)),visualize=False):
+    D,N = X.shape[0],X.shape[1]
+    X = sp.vstack((sp.ones((1,N)),X))
+
+    errors_std_loc = []
+    for it in range(its):
+      errors_std_loc.append(test_svm(X,Y,W,kernel)[0])
+      if visualize:
+        #print "discount:",discount
+        plot(errors_std_loc)
+
+      rn = sp.random.randint(N)
+      yhat = predict_svm_kernel(X[:,rn],X,W,kernel)
+      discount = eta/(it+1.)
+      if yhat*Y[:,rn] > 1: G = C * W
+      else: G = C * W - Y[:,rn] * kernel[0](sp.vstack((X[:,rn] )),X,kernel[1]).flatten()
+
+      W -= discount * G
+    return W,errors_std_loc
+
+    * @param X
+    */
+
   def fit_svm_kernel(W: DenseVector[Double], X_org: DenseMatrix[Double], Y: DenseMatrix[Double], iterations: Int, eta: Double = 1.0, C: Double = 0.1, sigma:Double = 1.0): (DenseVector[Double],DenseVector[Double]) = {
     var D: Int = X_org.rows
     var N: Int = X_org.cols
@@ -203,17 +144,6 @@ object Utils {
     return error/N.toDouble
   }
 
-
-
-//
-//  /**
-//  * def predict_svm_kernel(x,xt,w,kernel):
-//	return w.dot(kernel[0](sp.vstack((x)),xt,kernel[1]).T)
-//    * @param X
-//    */
-//
-//
-
   def plotLine(X: DenseVector[Double]): Unit = {
     val f = Figure()
     val p = f.subplot(0)
@@ -274,16 +204,6 @@ object Utils {
       p += plot(class1(0,::).t,class1(1,::).t,'.')
     }
   }
-//  def matrix2nestedArray(input: DenseMatrix[Double]): Array[Array[Double]] ={
-//
-//    var retArray: Array[Array[Double]] = Array[Array[Double]](Array[Double](input(0,::).))
-//    for(i <- 0 until input.cols){
-//
-//    }
-//
-//
-//
-//  }
 
   def make_data_xor(N: Int = 80, noise: Double = 0.25d): (DenseMatrix[Double],DenseMatrix[Double]) = {
 
@@ -335,63 +255,5 @@ object Utils {
 
     return (X,Y)
   }
-
-////  x: DenseVector[Double],X: DenseMatrix[Double], W: DenseVector[Double], sigma: Double
-//  def plotModel(X:DenseMatrix[Double], W: DenseVector[Double], sigma: Double){
-//    print("Detecting decision boundaries...")
-//    // compute decision boundary.
-//    val NUM = 100
-//    val x1 = linspace(X(::, 0).min, X(::, 0).max, NUM)
-//    val x2 = linspace(X(::, 1).min, X(::, 1).max, NUM)
-//    val (bx1, bx2) = computeDecisionBoundary(x1, x2, W, sigma, predict_svm_kernel_all)
-//    println(bx1, bx2)
-//    print(" Done!\n")
-//
-//    val f = Figure()
-//    val plot = f.subplot(0)
-//    // plot input data and detected boundary
-//    plot += scatter(X(::, 0), X(::, 1), {_ => 0.01}, y2Color(y))
-//    plot += scatter(bx1, bx2, {_ => 0.01}, { (_:Int) => Color.YELLOW})
-//    plot.xlabel = "X-value"
-//    plot.ylabel = "Y-value"
-//    plot.title = "Learning result by SVM\n blue:accepted, red: rejected, yellow:learned decision boundary"
-//    plot.refresh()
-//  }
-//  def meshgrid(x1: DenseVector[Double], x2: DenseVector[Double]): (DenseMatrix[Double], DenseMatrix[Double]) = {
-//    val x1Mesh = DenseMatrix.zeros[Double](x2.length, x1.length)
-//    for (i <- 0 until x2.length) {
-//      x1Mesh(i, ::) := x1.t
-//    }
-//    val x2Mesh = DenseMatrix.zeros[Double](x2.length, x1.length)
-//    for (i <- 0 until x1.length) {
-//      x2Mesh(::, i) := x2
-//    }
-//    (x1Mesh, x2Mesh)
-//  }
-//  def computeDecisionBoundary(x1: DenseVector[Double], x2: DenseVector[Double], predict:
-//  (DenseVector[Double],DenseMatrix[Double],DenseMatrix[Double],Double) => Double): (DenseVector[Double], DenseVector[Double]) = {
-//    val (x1Mesh, x2Mesh) = meshgrid(x1, x2)
-//    val decisions = DenseMatrix.zeros[Double](x1Mesh.rows, x1Mesh.cols)
-//
-//    // compute decisions for all mesh points.
-//    for (i <- 0 until x1Mesh.cols) {
-//      val this_X: DenseMatrix[Double] = DenseVector.horzcat(x1Mesh(::, i), x2Mesh(::, i))
-//      decisions(::, i) := predict(this_X)
-//    }
-//
-//    // detect boundary.
-//    var bx1 = Seq[Double]()
-//    var bx2 = Seq[Double]()
-//    for (i <- 1 until decisions.rows - 1; j <- 1 until decisions.cols - 1) {
-//      if (decisions(i, j) == 0d && (decisions(i - 1, j - 1) == 1d || decisions(i - 1, j) == 1d || decisions(i - 1, j + 1) == 1d
-//        || decisions(i, j - 1) == 1d || decisions(i, j + 1) == 1d
-//        || decisions(i + 1, j) == 1d || decisions(i + 1, j) == 1d || decisions(i + 1, j + 1) == 1d)) {
-//        bx1 = x1Mesh(i, j) +: bx1
-//        bx2 = x2Mesh(i, j) +: bx2
-//      }
-//    }
-//
-//    (DenseVector(bx1: _*), DenseVector(bx2: _*))
-//  }
 }
 
