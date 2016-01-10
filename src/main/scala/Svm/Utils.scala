@@ -96,12 +96,9 @@ object Utils {
       if (r(0) > 1) {
         G = C * W
       } else {
-        //TODO: cleanup!
-        var CW = C * W
+
         var Y_ = Y(::,rn)
-        var gkt: DenseVector[Double] = gaussianKernel(X(::,rn),X,sigma)//gaussianKernel_all(X(::,rn),X,sigma)
-        var last: DenseVector[Double] = Y_(0) * gkt
-        G = CW - last
+        G = C * W - Y_(0) * Utils.gaussianKernel(X(::,rn),X,sigma)
       }
       W := W - discount * G
     }
