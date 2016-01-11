@@ -45,7 +45,7 @@ under the License.
 
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<!--<flink.version>0.10.0</flink.version>-->
+		<flink.version>0.10.1</flink.version>
 	</properties>
 
 	<!-- 
@@ -122,21 +122,27 @@ under the License.
 			<artifactId>scalaplot</artifactId>
 			<version>0.0.4</version>
 		</dependency>
-		<!--<dependency>-->
-			<!--<groupId>org.apache.flink</groupId>-->
-			<!--<artifactId>flink-scala</artifactId>-->
-			<!--<version>${flink.version}</version>-->
-		<!--</dependency>-->
-		<!--<dependency>-->
-			<!--<groupId>org.apache.flink</groupId>-->
-			<!--<artifactId>flink-streaming-scala</artifactId>-->
-			<!--<version>${flink.version}</version>-->
-		<!--</dependency>-->
-		<!--<dependency>-->
-			<!--<groupId>org.apache.flink</groupId>-->
-			<!--<artifactId>flink-clients</artifactId>-->
-			<!--<version>${flink.version}</version>-->
-		<!--</dependency>-->
+		<dependency>
+			<groupId>org.apache.flink</groupId>
+			<artifactId>flink-scala</artifactId>
+			<version>${flink.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.flink</groupId>
+			<artifactId>flink-streaming-scala</artifactId>
+			<version>${flink.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.flink</groupId>
+			<artifactId>flink-clients</artifactId>
+			<version>${flink.version}</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.apache.flink</groupId>
+			<artifactId>flink-ml</artifactId>
+			<version>${flink.version}</version>
+		</dependency>
 	</dependencies>
 
 	<!-- We use the maven-assembly plugin to create a fat jar that contains all dependencies

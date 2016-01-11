@@ -165,10 +165,14 @@ object Utils {
     p.ylabel = "y axis"
   }
 
-  def plotModel(X: DenseMatrix[Double], W: DenseVector[Double], sigma: Double): Unit ={
+  def plotModel(X: DenseMatrix[Double], Y: DenseMatrix[Double], W: DenseVector[Double], sigma: Double): Unit ={
     // classify all points:
     var class0: DenseMatrix[Double] = null
     var class1: DenseMatrix[Double] = null
+
+    var class0_gt: DenseMatrix[Double] = null
+    var class1_gt: DenseMatrix[Double] = null
+
     for( i <- 0 until X.cols){
       // compute prediction
       var res = predict_svm_kernel_all(X(::,i),X,W,sigma)
@@ -187,6 +191,22 @@ object Utils {
           class1 = X(::,i).toDenseMatrix.t
         }
       }
+
+      if(Y(0,i) <= 0){
+        if(class0_gt != null){
+          class0_gt = DenseMatrix.horzcat(class0_gt, X(::,i).toDenseMatrix.t )
+        }else{
+          class0_gt = X(::,i).toDenseMatrix.t
+        }
+      }else{
+        if(class1_gt != null){
+          class1_gt = DenseMatrix.horzcat(class1_gt, X(::,i).toDenseMatrix.t )
+        }else{
+          class1_gt = X(::,i).toDenseMatrix.t
+        }
+      }
+
+
     }
 
     // put in plots
@@ -202,6 +222,26 @@ object Utils {
       println(class1)
       p += plot(class1(0,::).t,class1(1,::).t,'.')
     }
+    p.title = "classification"
+
+    val f2 = Figure()
+    val p2 = f2.subplot(0)
+    if(class0_gt != null){
+      println("class0:",class0_gt.cols,class0_gt.rows)
+      println(class0_gt)
+      p2 += plot(class0_gt(0,::).t,class0_gt(1,::).t,'.')
+    }
+    if(class1_gt != null){
+      println("class0:",class1_gt.cols,class1_gt.rows)
+      println(class1_gt)
+      p2 += plot(class1_gt(0,::).t,class1_gt(1,::).t,'.')
+    }
+    p2.title = "Groundtruth"
+
+
+
+
+
   }
 
   def make_data_xor(N: Int = 80, noise: Double = 0.25d): (DenseMatrix[Double],DenseMatrix[Double]) = {
@@ -253,6 +293,24 @@ object Utils {
     var Y: DenseMatrix[Double] = DenseMatrix.horzcat(ones.copy,-ones.copy)
 
     return (X,Y)
+  }
+
+
+
+  def shuffleData(Xordered: DenseMatrix[Double], Yordered: DenseMatrix[Double]):(DenseMatrix[Double], DenseMatrix[Double]) = {
+    assert(Xordered.cols == Yordered.cols, "feature matrix and target vector have different sizes!!")
+
+    var colsEnumeration: DenseVector[Int] = DenseVector.range(0,Xordered.cols,1)
+    var permutation = shuffle(colsEnumeration)
+
+    var Y: DenseMatrix[Double] = DenseMatrix.zeros[Double](1,Xordered.cols)
+    var X: DenseMatrix[Double] = DenseMatrix.zeros[Double](Xordered.rows,Xordered.cols)
+    for (i <- 0 until Xordered.cols){
+      // copy values from permutation
+      Y(::,i) := Yordered(::,permutation(i))
+      X(::,i) := Xordered(::,permutation(i))
+    }
+    (X,Y)
   }
 }
 
