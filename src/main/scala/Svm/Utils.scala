@@ -5,6 +5,7 @@ import breeze.numerics.sqrt
 import breeze.plot._
 import breeze.stats.distributions.MultivariateGaussian
 
+import scala.collection.mutable.ListBuffer
 import scala.util.Random
 import breeze.plot._
 import breeze.numerics.exp
@@ -21,7 +22,6 @@ object Utils {
     return K
     * @param X
     */
-
   def gaussianKernel(x1: DenseVector[Double], x2: DenseMatrix[Double],sigma: Double): DenseVector[Double] = {
 
     assert(x1.length == x2.rows)
@@ -31,21 +31,12 @@ object Utils {
       diff(i) = sqrt( (x1 :- x2(::,i)).dot(x1 :- x2(::,i)) )
       i += 1
     }
-
-    var difff = - (diff :* diff)
-
-    var denominator = 2 * sigma * sigma
-    var nominator = difff
-    var expon = nominator / denominator
-    var ret = exp( difff :/ (2 * sigma * sigma) )
-
-    ret
+    exp(- ( diff :* diff)/ (2 * sigma * sigma) )
   }
 
 
   def predict_svm_kernel_all(x: DenseVector[Double],X: DenseMatrix[Double], W: DenseVector[Double], sigma: Double): Double = {
-    var ret = W.t * gaussianKernel(x,X,sigma)
-    return ret
+    W.t * gaussianKernel(x,X,sigma)
   }
 
   /**
@@ -73,19 +64,22 @@ object Utils {
     * @param X
     */
 
-  def fit_svm_kernel(W: DenseVector[Double], X_org: DenseMatrix[Double], Y: DenseMatrix[Double], iterations: Int, eta: Double = 1.0, C: Double = 0.1, sigma:Double = 1.0): (DenseVector[Double],DenseVector[Double]) = {
+  def fit_svm_kernel(W: DenseVector[Double], X_org: DenseMatrix[Double], Y: DenseMatrix[Double], iterations: Int, eta: Double = 1.0, C: Double = 0.1, sigma:Double = 1.0, test_interval: Int = 10): (DenseVector[Double],DenseVector[Double]) = {
+
     var D: Int = X_org.rows
     var N: Int = X_org.cols
     var X = DenseMatrix.vertcat[Double](DenseMatrix.ones[Double](1,N),X_org)
 
+    assert(test_interval < iterations,"please set test_interval " + test_interval + " smaller than number of iterations " + iterations)
 
-    var errors:DenseVector[Double] = DenseVector.zeros[Double](iterations);
+    var errors:DenseVector[Double] = DenseVector.zeros[Double](iterations/test_interval)
     for(i <- 0 until iterations){
-      var err = test_svm(X,Y,W,sigma)
-      errors(i) = err
-      println("iteration:" + i + "erorr:" + errors(i))
-      //var rn = Random.nextInt(N)
-      var rn = i%N
+      if(i%test_interval == 0){
+        var err = test_svm(X,Y,W,sigma)
+        errors(i/test_interval) = err
+        println("iteration: " + i + " erorr:" + errors(i/test_interval) + " thats " + i/iterations.toDouble * 100.0 + " %")
+      }
+      var rn = Random.nextInt(N)
       var yhat: Double = predict_svm_kernel_all(X(::,rn),X,W,sigma)
       var discount = eta/(i + 1.)
 
@@ -131,17 +125,44 @@ object Utils {
       var yhat = predict_svm_kernel_all(X(::,i),X,W,sigma)
       var err:DenseVector[Double] = yhat * Y(::,i)
 
-      // TODO: change
       assert(err.length == 1)
 
-      if(!(err(0) >= 0) ){
-        error -= err(0)
-        point_error += 1
+      if(err(0) <= 1){
+        error += 1 - err(0)
       }
       i += 1
     }
-    return error/N.toDouble
+    error/N.toDouble
   }
+
+  def test_svm_multiclass(X: DenseMatrix[Double], Y: DenseMatrix[Double],Ws: ListBuffer[DenseVector[Double]],sigma: Double): Double = {
+    var N: Int = X.cols
+    var point_error: Int = 0
+
+    var error: Double = 0.0d
+
+    var results: ListBuffer[Double] = ListBuffer[Double]()
+    for(point <- 0 until X.cols){
+      // test all classifiers
+      var confidences: ListBuffer[Double] = ListBuffer[Double]()
+      for(c <- 0 until Ws.length){
+        // get confidence
+        var yhat: Double = predict_svm_kernel_all(X(::,point),X,Ws(c),sigma)
+        // how should this classifier label this thing?
+        confidences += yhat
+      }
+      // vote!
+      val max = confidences.max
+      val index = confidences.indexOf(max)
+
+      if(index != Y(::,point)){
+        error += 1
+      }
+    }
+    error/N.toDouble
+  }
+
+
 
   def plotLine(X: DenseVector[Double]): Unit = {
     val f = Figure()
@@ -158,9 +179,7 @@ object Utils {
     assert(X.rows == 2)
     val f = Figure()
     val p = f.subplot(0)
-    //val x = linspace(0.0,1.0)
     p += plot(X(0,::).t,X(1,::).t,'.')
-    //    p += plot(x, x :^ 3.0, '.')
     p.xlabel = "x axis"
     p.ylabel = "y axis"
   }
@@ -178,7 +197,6 @@ object Utils {
       var res = predict_svm_kernel_all(X(::,i),X,W,sigma)
 
       if (res < 1){
-
         if(class0 != null){
           class0 = DenseMatrix.horzcat(class0, X(::,i).toDenseMatrix.t )
         }else{
@@ -205,43 +223,30 @@ object Utils {
           class1_gt = X(::,i).toDenseMatrix.t
         }
       }
-
-
     }
-
     // put in plots
     val f = Figure()
     val p = f.subplot(0)
     if(class0 != null){
       println("class0:",class0.cols,class0.rows)
-      println(class0)
       p += plot(class0(0,::).t,class0(1,::).t,'.')
     }
     if(class1 != null){
       println("class0:",class1.cols,class1.rows)
-      println(class1)
       p += plot(class1(0,::).t,class1(1,::).t,'.')
     }
     p.title = "classification"
 
-    val f2 = Figure()
-    val p2 = f2.subplot(0)
+    val p2 = f.subplot(2,1,1)
     if(class0_gt != null){
       println("class0:",class0_gt.cols,class0_gt.rows)
-      println(class0_gt)
       p2 += plot(class0_gt(0,::).t,class0_gt(1,::).t,'.')
     }
     if(class1_gt != null){
       println("class0:",class1_gt.cols,class1_gt.rows)
-      println(class1_gt)
       p2 += plot(class1_gt(0,::).t,class1_gt(1,::).t,'.')
     }
     p2.title = "Groundtruth"
-
-
-
-
-
   }
 
   def make_data_xor(N: Int = 80, noise: Double = 0.25d): (DenseMatrix[Double],DenseMatrix[Double]) = {
@@ -249,7 +254,6 @@ object Utils {
     assert(N%4 == 0,"please use multiple of 4 for number of random samples")
     var mu: DenseMatrix[Double] = DenseMatrix((-1.0,1.0), (1.0,1.0)).t
     var C = DenseMatrix.eye[Double](2) * noise;
-    println("C\n" + C)
 
     // sample and convert to matrix
     var mvn1 = MultivariateGaussian(mu(::,0),C)
@@ -296,7 +300,12 @@ object Utils {
   }
 
 
-
+  /**
+    * fisher yates shuffle
+    * @param Xordered
+    * @param Yordered
+    * @return
+    */
   def shuffleData(Xordered: DenseMatrix[Double], Yordered: DenseMatrix[Double]):(DenseMatrix[Double], DenseMatrix[Double]) = {
     assert(Xordered.cols == Yordered.cols, "feature matrix and target vector have different sizes!!")
 

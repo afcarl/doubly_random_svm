@@ -1,10 +1,11 @@
 package Svm
 
 import breeze.linalg.{max, DenseVector, DenseMatrix}
-import org.apache.flink.api.common.functions.{ReduceFunction, MapFunction, FlatMapFunction}
+import org.apache.flink.api.common.functions.{RichMapFunction, ReduceFunction, MapFunction, FlatMapFunction}
 import org.apache.flink.api.scala._
 
 import org.apache.flink
+import org.apache.flink.configuration.Configuration
 import org.apache.flink.ml.common.LabeledVector
 
 
@@ -14,6 +15,7 @@ import org.apache.flink.ml.common.LabeledVector
 import org.apache.flink.ml.RichExecutionEnvironment
 
 import scala.collection.mutable.ListBuffer
+import scala.util.Random
 
 /**
   * Created by nikolaas steenbergen on 1/10/16.
@@ -25,7 +27,10 @@ object UtilsDist {
 
   def loadMnist():(DenseMatrix[Double],DenseMatrix[Double]) = {
 
-    var filepath = "/media/owner/extension/mnist_m8/infimnist/mnist_std/test-libsvm"
+//    var filepath = "/media/owner/extension/mnist_m8/infimnist/mnist_std/test-libsvm"
+//    var filepath = "/media/owner/extension/mnist_m8/infimnist/mnist_std/mnist60k-libsvm"
+//    var filepath = "/media/owner/extension/mnist_m8/infimnist/mnist_std/mnist-classes01-libsvm"
+    var filepath = "/media/owner/extension/mnist_m8/infimnist/mnist_std/mnist-classes01-every10th-libsvm"
     // Read the training data set, from a LibSVM formatted file
     val trainingDS: DataSet[LabeledVector] = env.readLibSVM(filepath)
 
@@ -35,7 +40,7 @@ object UtilsDist {
 
     //TODO: conversion can be done with flink as well
     for(i <- 0 until trainingcollect.size){
-      if(i % 100 == 0){println(i)}
+      if(i % 100 == 0){println("converting data : " + i + " of " + trainingcollect.size)}
       trainingdata(0,i) = trainingcollect(i).label
       var flinkVec: Vector = trainingcollect(i).vector
       for(j <- 0 until flinkVec.size){
@@ -90,7 +95,7 @@ object UtilsDist {
     * @param sigma
     * @return
     */
-  def fit_svm_kernel_flink(W: DenseVector[Double], X_org: DenseMatrix[Double], Y: DenseMatrix[Double], iterations: Int, eta: Double = 1.0, C: Double = 0.1, sigma:Double = 1.0): (DenseVector[Double], DenseVector[Double]) = {
+  def fit_svm_kernel_flink(W: DenseVector[Double], X_org: DenseMatrix[Double], Y: DenseMatrix[Double], iterations: Int, eta: Double = 1.0, C: Double = 0.1, sigma:Double = 1.0, test_interval: Int = 100): (DenseVector[Double], DenseVector[Double]) = {
 
     var D: Int = X_org.rows
     var N: Int = X_org.cols
@@ -101,37 +106,40 @@ object UtilsDist {
 
     assert(N % partitions == 0)
     var stepsize: Int = N / partitions
-    var errorsAll: DenseVector[Double] = DenseVector.zeros[Double](iterations * partitions)
+    var errorsAll: DenseVector[Double] = DenseVector.zeros[Double](iterations * partitions / test_interval)
 
-
-    var dataArray: ListBuffer[(Int,DenseMatrix[Double],DenseMatrix[Double],DenseVector[Double])] = ListBuffer[(Int,DenseMatrix[Double],DenseMatrix[Double],DenseVector[Double])]()
     //TODO: this should be done differently to prevent filling up the memory with all the data!
+    // split data into computable partitions
+    var dataArray: ListBuffer[(Int,DenseMatrix[Double],DenseMatrix[Double],DenseVector[Double])] = ListBuffer[(Int,DenseMatrix[Double],DenseMatrix[Double],DenseVector[Double])]()
     for(i <- 1 until partitions){
       var mini: Int = i * stepsize
       var maxi: Int = (i + 1) * stepsize
       dataArray += ((i,X(::,mini until maxi),Y(::,mini until maxi),W(mini until maxi)))
     }
-    for(el <- dataArray){
-      println(el)
-    }
 
-    println("length:" + dataArray)
+    println("number of partitions created:" + dataArray)
     var dataSet = env.fromCollection[(Int,DenseMatrix[Double],DenseMatrix[Double],DenseVector[Double])](dataArray)
 
-    var result = dataSet.map(new MapFunction[(Int,DenseMatrix[Double],DenseMatrix[Double],DenseVector[Double]),(Int,DenseVector[Double],DenseVector[Double])] {
+    val c = new Configuration()
+    c.setInteger("test_interval", test_interval)
+
+    //TODO: the data should be reshuffled at one point to prevent "unfortunate" distribution
+    var result = dataSet.map(new RichMapFunction[(Int,DenseMatrix[Double],DenseMatrix[Double],DenseVector[Double]),(Int,DenseVector[Double],DenseVector[Double])] {
       override def map(t: (Int, DenseMatrix[Double], DenseMatrix[Double], DenseVector[Double])): (Int, DenseVector[Double], DenseVector[Double]) = {
+        var test_interval = c.getInteger("test_interval", 1)
+
         var key = t._1
         var Xlocal = t._2
         var Ylocal = t._3
         var Wlocal = t._4
 
-        var res = fit_svm_kernel_one_node(Wlocal, Xlocal, Ylocal, iterations, eta = eta, C = C, sigma = sigma)
+        var res = fit_svm_kernel_one_node(Wlocal, Xlocal, Ylocal, iterations, eta = eta, C = C, sigma = sigma, test_interval = test_interval)
 
         var ret = (key,res._1,res._2)
         println(ret)
         ret
       }
-    })
+    }).withParameters(c)
 //
     var collected = result.collect()
 
@@ -139,8 +147,8 @@ object UtilsDist {
       var mini: Int = el._1 * stepsize
       var maxi: Int = (el._1 + 1) * stepsize
       W(mini until maxi) := el._2
-      var minErr: Int = el._1 * iterations
-      var maxErr: Int = (el._1 + 1) * iterations
+      var minErr: Int = el._1 * iterations/test_interval
+      var maxErr: Int = (el._1 + 1) * iterations/test_interval
       errorsAll( minErr until maxErr) := el._3
     }
     return (W,errorsAll)
@@ -149,56 +157,59 @@ object UtilsDist {
 
 
 
-  def fit_svm_kernel(W: DenseVector[Double], X_org: DenseMatrix[Double], Y: DenseMatrix[Double], iterations: Int, eta: Double = 1.0, C: Double = 0.1, sigma:Double = 1.0): (DenseVector[Double], DenseVector[Double]) = {
-    var D: Int = X_org.rows
-    var N: Int = X_org.cols
-    var X = DenseMatrix.vertcat[Double](DenseMatrix.ones[Double](1, N), X_org)
+//  def fit_svm_kernel(W: DenseVector[Double], X_org: DenseMatrix[Double], Y: DenseMatrix[Double], iterations: Int, eta: Double = 1.0, C: Double = 0.1, sigma:Double = 1.0): (DenseVector[Double], DenseVector[Double]) = {
+//    var D: Int = X_org.rows
+//    var N: Int = X_org.cols
+//    var X = DenseMatrix.vertcat[Double](DenseMatrix.ones[Double](1, N), X_org)
+//
+//    // split up to number of partitions:
+//    var partitions: Int = 10
+//
+//    assert(N % partitions == 0, "number of datapoints " + N + " should be divisible by number of partitions " + partitions)
+//    var stepsize: Int = N / partitions
+//    var errorsAll: DenseVector[Double] = DenseVector.zeros[Double](iterations * partitions)
+//
+//    //TODO: parallelize here
+//    for(i <- 0 until partitions){
+//      var mini: Int = i * stepsize
+//      var maxi: Int = (i + 1) * stepsize
+//
+//      var Ylocal: DenseMatrix[Double] = Y(::,mini until maxi)
+//      var Wlocal: DenseVector[Double] = W(mini until maxi)
+//      var Xlocal: DenseMatrix[Double] = X(::, mini until maxi)
+//
+//      var W_sub: DenseVector[Double] = null
+//      var errors: DenseVector[Double] = null
+//      var res = fit_svm_kernel_one_node(Wlocal,Xlocal,Ylocal,iterations,eta = eta,C = C,sigma = sigma)
+//
+//      W_sub = res._1
+//      errors = res._2
+//
+//      W(mini until maxi) := W_sub
+//      var minErr: Int = i * iterations
+//      var maxErr: Int = (i + 1) * iterations
+//      errorsAll( minErr until maxErr) := errors
+//    }
+////    TODO: errors do not refelect real training error (on all datapoints)!
+//    return (W,errorsAll)
+//  }
 
-    // split up to number of partitions:
-    var partitions: Int = 10
 
-    assert(N % partitions == 0, "number of datapoints " + N + " should be divisible by number of partitions " + partitions)
-    var stepsize: Int = N / partitions
-    var errorsAll: DenseVector[Double] = DenseVector.zeros[Double](iterations * partitions)
-
-    //TODO: parallelize here
-    for(i <- 0 until partitions){
-      var mini: Int = i * stepsize
-      var maxi: Int = (i + 1) * stepsize
-
-      var Ylocal: DenseMatrix[Double] = Y(::,mini until maxi)
-      var Wlocal: DenseVector[Double] = W(mini until maxi)
-      var Xlocal: DenseMatrix[Double] = X(::, mini until maxi)
-
-      var W_sub: DenseVector[Double] = null
-      var errors: DenseVector[Double] = null
-      var res = fit_svm_kernel_one_node(Wlocal,Xlocal,Ylocal,iterations,eta = eta,C = C,sigma = sigma)
-
-      W_sub = res._1
-      errors = res._2
-
-      W(mini until maxi) := W_sub
-      var minErr: Int = i * iterations
-      var maxErr: Int = (i + 1) * iterations
-      errorsAll( minErr until maxErr) := errors
-    }
-//    TODO: errors do not refelect real training error (on all datapoints)!
-    return (W,errorsAll)
-  }
-
-
-  def fit_svm_kernel_one_node(W: DenseVector[Double], X: DenseMatrix[Double], Y: DenseMatrix[Double], iterations: Int, eta: Double = 1.0, C: Double = 0.1, sigma:Double = 1.0): (DenseVector[Double],DenseVector[Double]) = {
+  def fit_svm_kernel_one_node(W: DenseVector[Double], X: DenseMatrix[Double], Y: DenseMatrix[Double], iterations: Int, eta: Double = 1.0, C: Double = 0.1, sigma:Double = 1.0, test_interval:Int = 1): (DenseVector[Double],DenseVector[Double]) = {
     var D: Int = X.rows
     var N: Int = X.cols
 
+    assert(test_interval < iterations,"please set test_interval " + test_interval + " smaller than number of iterations " + iterations)
+    var errors:DenseVector[Double] = DenseVector.zeros[Double](iterations/test_interval)
 
-    var errors:DenseVector[Double] = DenseVector.zeros[Double](iterations);
     for(i <- 0 until iterations){
-      var err = Utils.test_svm(X,Y,W,sigma)
-      errors(i) = err
-      println("iteration:" + i + "erorr:" + errors(i))
-      //var rn = Random.nextInt(N)
-      var rn = i%N
+      if(i%test_interval == 0){
+        var err = Utils.test_svm(X,Y,W,sigma)
+        errors(i/test_interval) = err
+        println("iteration: " + i + " erorr:" + errors(i/test_interval) + " thats " + i/iterations.toDouble * 100.0 + " %")
+      }
+      var rn = Random.nextInt(N)
+//      var rn = i%N
       var yhat: Double = Utils.predict_svm_kernel_all(X(::,rn),X,W,sigma)
       var discount = eta/(i + 1.)
 
