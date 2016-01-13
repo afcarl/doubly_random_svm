@@ -1,5 +1,5 @@
 package Svm
-import breeze.linalg.{shuffle, convert, DenseMatrix, DenseVector}
+import breeze.linalg._
 
 import scala.collection.mutable.ListBuffer
 import scala.util.Random
@@ -8,6 +8,8 @@ import scala.util.Random
   * Created by nikolaas steenbergen on 1/8/16.
   */
 
+
+import breeze.stats.mean
 object Tests {
 
 
@@ -45,10 +47,17 @@ object Tests {
     //    runSample()
 //    testShuffleData()
 
-    var res = UtilsDist.loadMnist()
-    var X = res._1
-    var Y = res._2
-    var res2: ListBuffer[DenseMatrix[Double]] = UtilsDist.createOneVsAllTrainingsets(Y)
+    var m: DenseMatrix[Double] = DenseMatrix((1d,1d,1d,3d),(2d,2d,2d,6d))
+    println(m)
+    var means = mean(m)
+    println("mean")
+    println(means)
+    var maxs = max(m)
+    println(maxs)
+//    var res = UtilsDist.loadMnist()
+//    var X = res._1
+//    var Y = res._2
+//    var res2: ListBuffer[DenseMatrix[Double]] = UtilsDist.createOneVsAllTrainingsets(Y)
 
 
 

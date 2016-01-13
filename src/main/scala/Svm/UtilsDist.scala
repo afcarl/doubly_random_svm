@@ -17,6 +17,7 @@ import org.apache.flink.ml.RichExecutionEnvironment
 import scala.collection.mutable.ListBuffer
 import scala.util.Random
 
+import breeze.stats.mean
 /**
   * Created by nikolaas steenbergen on 1/10/16.
   */
@@ -25,27 +26,32 @@ object UtilsDist {
 
   var env = ExecutionEnvironment.getExecutionEnvironment
 
-  def loadMnist():(DenseMatrix[Double],DenseMatrix[Double]) = {
+  def loadMnist(filepath: String):(DenseMatrix[Double],DenseMatrix[Double]) = {
 
-//    var filepath = "/media/owner/extension/mnist_m8/infimnist/mnist_std/test-libsvm"
-//    var filepath = "/media/owner/extension/mnist_m8/infimnist/mnist_std/mnist60k-libsvm"
-//    var filepath = "/media/owner/extension/mnist_m8/infimnist/mnist_std/mnist-classes01-libsvm"
-    var filepath = "/media/owner/extension/mnist_m8/infimnist/mnist_std/mnist-classes01-every10th-libsvm"
     // Read the training data set, from a LibSVM formatted file
     val trainingDS: DataSet[LabeledVector] = env.readLibSVM(filepath)
 
     val trainingcollect = trainingDS.collect()
 
-    var trainingdata = DenseMatrix.zeros[Double](trainingcollect(0).vector.size + 1 ,trainingcollect.size)
+    var mnist_vector_size: Int = 784
+    var trainingdata = DenseMatrix.zeros[Double](mnist_vector_size + 1 ,trainingcollect.size)
 
     //TODO: conversion can be done with flink as well
+    //TODO: also, optimize.
+    var inputMean = mean(trainingdata)
+    var inputMax = max(trainingdata)
     for(i <- 0 until trainingcollect.size){
-      if(i % 100 == 0){println("converting data : " + i + " of " + trainingcollect.size)}
+      if(i % 100 == 0){println("converting data : " + i + " of " + trainingcollect.size + " thats " + i/trainingcollect.size.toDouble * 100.0 + " %")}
       trainingdata(0,i) = trainingcollect(i).label
       var flinkVec: Vector = trainingcollect(i).vector
       for(j <- 0 until flinkVec.size){
         var flinkvecval = flinkVec(j)
-        trainingdata(j + 1,i) = flinkvecval
+        // copy data and normalize //TODO: further preprocessing?
+        // http://arxiv.org/pdf/1407.5599.pdf
+        // use PCA to reduce to 50 dimensions ?
+
+        // normalize to 0-1
+        trainingdata(j + 1,i) = flinkvecval  / 255d
       }
     }
 
@@ -74,7 +80,7 @@ object UtilsDist {
     for( classIdx <- 0 until num_classes){
       var Y_current: DenseMatrix[Double] = DenseMatrix.zeros[Double](1,Y.cols)
       for( col <- 0 until Y.cols){
-        if(Y(::,col) != classIdx){
+        if(Y(0,col) != classIdx){
           Y_current(0,col) = -1
         }else{
           Y_current(0,col) = 1
@@ -155,46 +161,6 @@ object UtilsDist {
   }
 
 
-
-
-//  def fit_svm_kernel(W: DenseVector[Double], X_org: DenseMatrix[Double], Y: DenseMatrix[Double], iterations: Int, eta: Double = 1.0, C: Double = 0.1, sigma:Double = 1.0): (DenseVector[Double], DenseVector[Double]) = {
-//    var D: Int = X_org.rows
-//    var N: Int = X_org.cols
-//    var X = DenseMatrix.vertcat[Double](DenseMatrix.ones[Double](1, N), X_org)
-//
-//    // split up to number of partitions:
-//    var partitions: Int = 10
-//
-//    assert(N % partitions == 0, "number of datapoints " + N + " should be divisible by number of partitions " + partitions)
-//    var stepsize: Int = N / partitions
-//    var errorsAll: DenseVector[Double] = DenseVector.zeros[Double](iterations * partitions)
-//
-//    //TODO: parallelize here
-//    for(i <- 0 until partitions){
-//      var mini: Int = i * stepsize
-//      var maxi: Int = (i + 1) * stepsize
-//
-//      var Ylocal: DenseMatrix[Double] = Y(::,mini until maxi)
-//      var Wlocal: DenseVector[Double] = W(mini until maxi)
-//      var Xlocal: DenseMatrix[Double] = X(::, mini until maxi)
-//
-//      var W_sub: DenseVector[Double] = null
-//      var errors: DenseVector[Double] = null
-//      var res = fit_svm_kernel_one_node(Wlocal,Xlocal,Ylocal,iterations,eta = eta,C = C,sigma = sigma)
-//
-//      W_sub = res._1
-//      errors = res._2
-//
-//      W(mini until maxi) := W_sub
-//      var minErr: Int = i * iterations
-//      var maxErr: Int = (i + 1) * iterations
-//      errorsAll( minErr until maxErr) := errors
-//    }
-////    TODO: errors do not refelect real training error (on all datapoints)!
-//    return (W,errorsAll)
-//  }
-
-
   def fit_svm_kernel_one_node(W: DenseVector[Double], X: DenseMatrix[Double], Y: DenseMatrix[Double], iterations: Int, eta: Double = 1.0, C: Double = 0.1, sigma:Double = 1.0, test_interval:Int = 1): (DenseVector[Double],DenseVector[Double]) = {
     var D: Int = X.rows
     var N: Int = X.cols
@@ -205,11 +171,10 @@ object UtilsDist {
     for(i <- 0 until iterations){
       if(i%test_interval == 0){
         var err = Utils.test_svm(X,Y,W,sigma)
-        errors(i/test_interval) = err
-        println("iteration: " + i + " erorr:" + errors(i/test_interval) + " thats " + i/iterations.toDouble * 100.0 + " %")
+        errors(i/test_interval) = err._1
+        println("iteration: " + i + " thats " + i/iterations.toDouble * 100.0 + " % erorr:" + errors(i/test_interval) + " number missclassified data points: " + err._2 + " of " + N)
       }
       var rn = Random.nextInt(N)
-//      var rn = i%N
       var yhat: Double = Utils.predict_svm_kernel_all(X(::,rn),X,W,sigma)
       var discount = eta/(i + 1.)
 

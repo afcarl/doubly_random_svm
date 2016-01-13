@@ -1,14 +1,13 @@
 package Svm
 
 import breeze.linalg._
-import breeze.numerics.sqrt
+import breeze.numerics.{ceil, sqrt, exp}
 import breeze.plot._
 import breeze.stats.distributions.MultivariateGaussian
 
 import scala.collection.mutable.ListBuffer
 import scala.util.Random
 import breeze.plot._
-import breeze.numerics.exp
 /**
   * Created by nikolaas steenbergen on 1/8/16.
   */
@@ -72,13 +71,26 @@ object Utils {
 
     assert(test_interval < iterations,"please set test_interval " + test_interval + " smaller than number of iterations " + iterations)
 
-    var errors:DenseVector[Double] = DenseVector.zeros[Double](iterations/test_interval)
+    var eta_update: Int = ceil(iterations/10.0).toInt
+
+    var errors: DenseVector[Double] = null
+    if(! (test_interval == 0)){
+      errors = DenseVector.zeros[Double](iterations/test_interval)
+    }
+
+
+    var tstart = System.nanoTime()
+    var tend = System.nanoTime()
     for(i <- 0 until iterations){
-      if(i%test_interval == 0){
-        var err = test_svm(X,Y,W,sigma)
-        errors(i/test_interval) = err
-        println("iteration: " + i + " erorr:" + errors(i/test_interval) + " thats " + i/iterations.toDouble * 100.0 + " %")
+      // test for progress
+      if(test_interval != 0){
+        if(i%test_interval == 0){
+          var err = test_svm(X,Y,W,sigma)
+          errors(i/test_interval) = err._1
+          println("iteration: " + i + " thats " + i/iterations.toDouble * 100.0 + " % erorr:" + errors(i/test_interval) + " number missclassified data points: " + err._2 + " of " + N)
+        }
       }
+
       var rn = Random.nextInt(N)
       var yhat: Double = predict_svm_kernel_all(X(::,rn),X,W,sigma)
       var discount = eta/(i + 1.)
@@ -95,6 +107,10 @@ object Utils {
         G = C * W - Y_(0) * Utils.gaussianKernel(X(::,rn),X,sigma)
       }
       W := W - discount * G
+      if(i%eta_update == 0){
+        tend = System.nanoTime()
+        println("estimated time left:" + (((tend - tstart)/1000000000.0)/i.toDouble) * (iterations - i) + "s")
+      }
     }
 
     return (W,errors)
@@ -114,7 +130,7 @@ object Utils {
         return [error[0]/float(X.shape[1]),point_error/float(X.shape[1])]
     * @param X
     */
-  def test_svm(X: DenseMatrix[Double], Y: DenseMatrix[Double],W: DenseVector[Double],sigma: Double): Double = {
+  def test_svm(X: DenseMatrix[Double], Y: DenseMatrix[Double],W: DenseVector[Double],sigma: Double): (Double,Int) = {
     var i: Int = 0
     var N: Int = X.cols
 
@@ -129,17 +145,21 @@ object Utils {
 
       if(err(0) <= 1){
         error += 1 - err(0)
+        point_error += 1
       }
       i += 1
     }
-    error/N.toDouble
+    (error/N.toDouble,point_error)
   }
 
-  def test_svm_multiclass(X: DenseMatrix[Double], Y: DenseMatrix[Double],Ws: ListBuffer[DenseVector[Double]],sigma: Double): Double = {
+  def test_svm_multiclass(X: DenseMatrix[Double], Y: DenseMatrix[Double], X_model: ListBuffer[DenseMatrix[Double]], Ws: ListBuffer[DenseVector[Double]],sigma: Double): Double = {
     var N: Int = X.cols
     var point_error: Int = 0
 
     var error: Double = 0.0d
+
+    var eta_update: Int = ceil(X.cols/10.0).toInt
+    var tstart = System.nanoTime()
 
     var results: ListBuffer[Double] = ListBuffer[Double]()
     for(point <- 0 until X.cols){
@@ -147,7 +167,7 @@ object Utils {
       var confidences: ListBuffer[Double] = ListBuffer[Double]()
       for(c <- 0 until Ws.length){
         // get confidence
-        var yhat: Double = predict_svm_kernel_all(X(::,point),X,Ws(c),sigma)
+        var yhat: Double = predict_svm_kernel_all(X(::,point),X_model(c),Ws(c),sigma)
         // how should this classifier label this thing?
         confidences += yhat
       }
@@ -155,8 +175,12 @@ object Utils {
       val max = confidences.max
       val index = confidences.indexOf(max)
 
-      if(index != Y(::,point)){
+      if(index != Y(0,point)){
         error += 1
+      }
+      if(point%eta_update == 0){
+        var tend = System.nanoTime()
+        println("estimated time left:" + (((tend - tstart)/1000000000.0)/point.toDouble) * (X.cols - point) + "s")
       }
     }
     error/N.toDouble
