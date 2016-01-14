@@ -151,6 +151,73 @@ def compute_gradient(y,Xpred,Xexpand,w,kernel,C):
 def predict_svm_emp(Xexpand,Xtarget,w,kernel):
 	return w.dot(kernel[0](Xexpand,Xtarget,kernel[1]))
 
+def run_comparison_expand_krr(N=100,noise=0.1,nExpandSamples=[5,10,100],its=100,reps=10):
+    pl.ion()
+    pl.figure(figsize=(20,12))
+    colors = "brymcwg"
+    leg = []
+    for idx,cond in enumerate(nExpandSamples):
+        Eemp, Erks, Ebatch, EempFix = sp.zeros((reps,its)), sp.zeros((reps,its)), sp.zeros((reps,its)), sp.zeros((reps,its))
+        for irep in range(reps):
+            X,Y = make_data_cos(N*2,noise=noise)
+            Y = Y.flatten()
+            # split into train and test
+            Xtest = X[:,:len(Y)/2]
+            Ytest = Y[:len(Y)/2]
+            X = X[:,(len(Y)/2):]
+            Y = Y[(len(Y)/2):]
+
+            EempFix[irep,:] = fit_krr_dskl_emp(X[:,:cond],Y[:cond],Xtest,Ytest,nExpandSamples=0,its=its)
+            Eemp[irep,:] = fit_krr_dskl_emp(X,Y,Xtest,Ytest,nExpandSamples=cond,its=its)
+            Erks[irep,:] = fit_krr_dskl_rks(X,Y,Xtest,Ytest,nExpandSamples=cond,its=its)
+
+        pl.plot(Eemp.mean(axis=0),colors[idx]+'.')
+        pl.plot(Erks.mean(axis=0),colors[idx]+'-')
+        pl.plot(EempFix.mean(axis=0),colors[idx]+'--')
+        leg.append("Emp, nSamp=%d"%cond)
+        leg.append("Rks, nSamp=%d"%cond)
+        leg.append("EmpFix, nSamp=%d"%cond)
+    
+    Ebatch = fit_krr_batch(X,Y,Xtest,Ytest)
+    pl.plot(Ebatch.mean()*sp.ones(Eemp.shape[1]))
+    leg.append("Batch, nSamp=%d"%N)
+    pl.legend(leg)
+    #pl.ylim(0,1.3)
+    #pl.axis('tight')
+    pl.savefig("rks_emp_comparison.pdf",)
+
+def predict_krr_emp(X,Xtest,W,kernel=(GaussianKernel,(1.))): return W.dot(kernel[0](X,Xtest,kernel[1]))
+
+def predict_krr_rks(Xtest,W,Z): return sp.exp(Z.dot(Xtest)) / sp.sqrt(Xtest.shape[1])
+
+def error_krr(y,yhat): return sp.mean((y-yhat)**2)
+
+def fit_krr_batch(X,Y,Xtest,Ytest,kernel=(GaussianKernel,(1.))):
+    y = (sp.linalg.inv(kernel[0](X,X,kernel[1]) + sp.eye(X.shape[1]) * 1e-5).dot(Y)).dot(kernel[0](X,Xtest,kernel[1]))
+    return error_krr(Ytest,y)
+
+def fit_krr_dskl_emp(X,Y,Xtest,Ytest,its=100,eta=1.,C=.1,nPredSamples=10,nExpandSamples=10, kernel=(GaussianKernel,(1.))):
+    Wemp = sp.randn(len(Y))
+    Eemp = []
+
+    for it in range(1,its+1):
+        Wemp = step_dskl_empirical_krr(X,Y,Wemp,eta/it,C,kernel,nPredSamples,nExpandSamples)
+        Eemp.append(error_krr(Ytest,predict_krr_emp(X,Xtest,Wemp,kernel))) 
+    return Eemp
+
+def fit_krr_dskl_rks(X,Y,Xtest,Ytest,its=100,eta=1.,C=.1,nPredSamples=10,nExpandSamples=10, kernel=(GaussianKernel,(1.))):
+    # random gaussian for rks
+    Zrks = sp.randn(len(Y),X.shape[0]) / (kernel[1]**2)
+    Wrks = sp.randn(len(Y))
+
+    Erks = []
+
+    for it in range(1,its+1):
+        Wrks = step_dskl_rks_krr(X,Y,Wrks,Zrks,eta/it,C,nPredSamples,nExpandSamples)
+        Erks.append(error_krr(Ytest,predict_krr_rks(Xtest,Wrks,Zrks)))
+    return Erks
+
+
 def step_dskl_empirical_krr(X,Y,W,eta=1.,C=.1,kernel=(GaussianKernel,(1.)),nPredSamples=10,nExpandSamples=10):
     if nPredSamples==0: rnpred=range(len(Y))
     else: rnpred = sp.random.randint(low=0,high=X.shape[1],size=nPredSamples)
