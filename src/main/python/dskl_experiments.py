@@ -4,6 +4,11 @@ from numpy.random import multivariate_normal as mvn
 import sklearn
 import pdb
 from scipy.spatial.distance import cdist
+from sklearn.svm import SVC
+from sklearn.datasets import fetch_mldata,make_gaussian_quantiles
+
+custom_data_home = "."
+
 
 def GaussianKernel(X1, X2, sigma):
    assert(X1.shape[0] == X2.shape[0])
@@ -11,7 +16,7 @@ def GaussianKernel(X1, X2, sigma):
    K = sp.exp(-(K ** 2) / (2. * sigma ** 2))
    return K
 
-def fit_svm_kernel(X,Y,its=100,eta=1.,C=.1,kernel=(GaussianKernel,(1.)),nPredSamples=10,nExpandSamples=10):
+def fit_svm_kernel(X,Y,its=30,eta=1.,C=.1,kernel=(GaussianKernel,(1.)),nPredSamples=10,nExpandSamples=10):
     D,N = X.shape[0],X.shape[1]
     X = sp.vstack((sp.ones((1,N)),X))
     W = sp.randn(len(Y))
@@ -26,42 +31,51 @@ def fit_svm_kernel(X,Y,its=100,eta=1.,C=.1,kernel=(GaussianKernel,(1.)),nPredSam
 	
     return W
 
-def run_comparison_expand(N=50,noise=0.1,nExpandSamples=[1,5,10,100],its=100,reps=100):
+def run_comparison_expand(N=50,features=2,nExpandSamples=[1,5,10,50],its=100,reps=100):
+    noise = 0.2
+    C = .00001
+    eta = 1.
+    nPred = 10
     pl.ion()
-    pl.figure(figsize=(20,12))
+    pl.figure(figsize=(8,4))
     colors = "brymcwg"
     leg = []
     for idx,cond in enumerate(nExpandSamples):
         Eemp, Erks, Ebatch, EempFix = sp.zeros((reps,its)), sp.zeros((reps,its)), sp.zeros((reps,its)), sp.zeros((reps,its))
         for irep in range(reps):
             X,Y = make_data_xor(N*2,noise=noise)
+            #X,Y = make_gaussian_quantiles(n_classes=2,n_samples=N*2,n_features=features)
+            #Y=sp.sign(Y-.5)
+            #X = X.T
             # split into train and test
             Xtest = X[:,:len(Y)/2]
             Ytest = Y[:len(Y)/2]
             X = X[:,(len(Y)/2):]
             Y = Y[(len(Y)/2):]
 
-            EempFix[irep,:] = fit_svm_dskl_emp(X[:,:cond],Y[:cond],Xtest,Ytest,nExpandSamples=0,its=its)
-            Eemp[irep,:] = fit_svm_dskl_emp(X,Y,Xtest,Ytest,nExpandSamples=cond,its=its)
-            Erks[irep,:] = fit_svm_dskl_rks(X,Y,Xtest,Ytest,nExpandSamples=cond,its=its)
+            EempFix[irep,:] = fit_svm_dskl_emp(X[:,:cond],Y[:cond],Xtest,Ytest,nExpandSamples=0,its=its,nPredSamples=nPred,eta=eta,C=C)
+            Eemp[irep,:] = fit_svm_dskl_emp(X,Y,Xtest,Ytest,nExpandSamples=cond,its=its,nPredSamples=nPred,eta=eta,C=C)
+            Erks[irep,:] = fit_svm_dskl_rks(X,Y,Xtest,Ytest,nExpandSamples=cond,its=its,nPredSamples=nPred,eta=eta,C=C)
+            Ebatch[irep,:] = fit_svm_batch(X,Y,Xtest,Ytest,1.)
 
-        pl.plot(Eemp.mean(axis=0),colors[idx]+'.')
-        pl.plot(Erks.mean(axis=0),colors[idx]+'-')
-        pl.plot(EempFix.mean(axis=0),colors[idx]+'--')
-        leg.append("Emp, nSamp=%d"%cond)
-        leg.append("Rks, nSamp=%d"%cond)
-        leg.append("EmpFix, nSamp=%d"%cond)
+        pl.clf()
+        pl.plot(Erks.mean(axis=0),'k-')
+        pl.plot(Eemp.mean(axis=0),'k.')
+        pl.plot(EempFix.mean(axis=0),'k--')
+        leg.append("Rks")
+        leg.append("Emp")
+        leg.append("Emp_{Fix}")
     
-    #Ebatch = fit_svm_batch(X,Y,Xtest,Ytest,1.)
-    #pl.plot(Ebatch.mean()*sp.ones(Eemp.shape[1]))
-    #leg.append("Batch, nSamp=%d"%N)
-    pl.legend(leg)
-    #pl.ylim(0,1.3)
-    #pl.axis('tight')
-    pl.savefig("rks_emp_comparison.pdf",)
+        pl.plot(Ebatch.mean()*sp.ones(Eemp.shape[1]),'k:')
+        leg.append("Batch")
+        if idx==0:pl.legend(leg,loc=3)
+        pl.title("nExpand=%d"%cond)
+        pl.ylim((0,.55))
+        #pl.axis('tight')
+        pl.savefig("rks_emp_comparison-expand-%d.pdf"%cond)
 
 def fit_svm_batch(X,Y,Xtest,Ytest,gamma):
-    batchsvm = sklearn.svm.SVC(gamma=gamma)
+    batchsvm = SVC(gamma=gamma)
     batchsvm.fit(X.T,Y)
     return sp.mean(Ytest!=batchsvm.predict(Xtest.T))
 
@@ -151,7 +165,7 @@ def compute_gradient(y,Xpred,Xexpand,w,kernel,C):
 def predict_svm_emp(Xexpand,Xtarget,w,kernel):
 	return w.dot(kernel[0](Xexpand,Xtarget,kernel[1]))
 
-def run_comparison_expand_krr(N=10,noise=0.1,nExpandSamples=[1,10,100],its=100,reps=100):
+def run_comparison_expand_krr(N=100,noise=0.1,nExpandSamples=[1,10,100],its=100,reps=100):
     pl.ion()
     pl.figure(figsize=(20,12))
     colors = "brymcwg"
@@ -199,7 +213,7 @@ def fit_krr_batch(X,Y,Xtest,Ytest,kernel=(GaussianKernel,(1.))):
     y = (sp.linalg.inv(kernel[0](X,X,kernel[1]) + sp.eye(X.shape[1]) * 1e-5).dot(Y)).dot(kernel[0](X,Xtest,kernel[1]))
     return error_krr(Ytest,y)
 
-def fit_krr_dskl_emp_result(X,Y,Xtest,Ytest,its=100,eta=.1,C=.001,nPredSamples=30,nExpandSamples=10, kernel=(GaussianKernel,(1.))):
+def fit_krr_dskl_emp_result(X,Y,Xtest,Ytest,its=100,eta=.1,C=.001,nPredSamples=10,nExpandSamples=10, kernel=(GaussianKernel,(1.))):
     Wemp = sp.randn(len(Y))
     Eemp = []
 
@@ -348,7 +362,7 @@ def make_plot_twoclass(X,Y,W,kernel):
 	#pl.show()
 	pl.savefig('./svm_kernel_xor_data.pdf')
 	
-if __name__ == '__main__':
+def plot_xor_example():
     k = GaussianKernel
     kparam = 1.
     N = 60
@@ -356,4 +370,9 @@ if __name__ == '__main__':
     X,y = make_data_xor(N,noise)
     w = w = fit_svm_kernel(X,y.flatten())
     make_plot_twoclass(X,y,w.T,kernel=(k,(kparam)))
+
+
+if __name__ == '__main__':
+   plot_xor_example()
+   run_comparison_expand()
 
