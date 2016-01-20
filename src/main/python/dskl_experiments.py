@@ -37,7 +37,7 @@ class DSEKL(BaseEstimator, ClassifierMixin):
         assert(all(self.classes_==[-1.,1.]))
         self.X = X
         self.y = y
-        self.w = sp.randn(len(y))
+        self.w = sp.float128(sp.randn(len(y)))
 
         for it in range(1,self.n_its+1):
             self.take_gradient_step(it)
@@ -104,10 +104,10 @@ def run_realdata(reps=10,dname="covertype"):
     params = {
             'n_pred_samples': [10,100],
             'n_expand_samples': [10,100],
-            'n_its':[1000],
+            'n_its':[100],
             'eta':[1.],
-            'C':10.**sp.arange(-3,3,2),
-            'gamma':[1000.,10000]
+            'C':10.**sp.arange(-4,4),
+            'gamma':10.**sp.arange(-1,3)
             }
 
     N = sp.minimum(dd.data.shape[0],1000)
