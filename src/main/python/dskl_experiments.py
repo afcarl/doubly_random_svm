@@ -9,7 +9,6 @@ from sklearn.datasets import fetch_mldata,make_gaussian_quantiles
 
 custom_data_home = "."
 
-
 def GaussianKernel(X1, X2, sigma):
    assert(X1.shape[0] == X2.shape[0])
    K = cdist(X1.T, X2.T, 'euclidean')
@@ -30,14 +29,57 @@ def fit_svm_kernel(X,Y,its=30,eta=1.,C=.1,kernel=(GaussianKernel,(1.)),nPredSamp
         W[rnexpand] -= eta/(it+1.) * G
 	
     return W
-
-def run_comparison_expand(N=50,features=2,nExpandSamples=[1,5,10,50],its=100,reps=100):
+def run_comparison_pred(N=50,features=2,nPredSamples=[1,5,10,50],its=100,reps=100):
     noise = 0.2
-    C = .00001
+    C = .1
     eta = 1.
-    nPred = 10
+    nExpand = 50
     pl.ion()
     pl.figure(figsize=(8,4))
+    colors = "brymcwg"
+    leg = []
+    for idx,cond in enumerate(nPredSamples):
+        Eemp, Erks, Ebatch, EempFix = sp.zeros((reps,its)), sp.zeros((reps,its)), sp.zeros((reps,its)), sp.zeros((reps,its))
+        for irep in range(reps):
+            #X,Y = make_data_xor(N*2,noise=noise)
+            X,Y = make_gaussian_quantiles(n_classes=2,n_samples=N*2,n_features=features)
+            Y=sp.sign(Y-.5)
+            X = X.T
+            # split into train and test
+            Xtest = X[:,:len(Y)/2]
+            Ytest = Y[:len(Y)/2]
+            X = X[:,(len(Y)/2):]
+            Y = Y[(len(Y)/2):]
+
+            EempFix[irep,:] = fit_svm_dskl_emp(X[:,:nExpand],Y[:nExpand],Xtest,Ytest,nExpandSamples=0,its=its,nPredSamples=cond,eta=eta,C=C)
+            Eemp[irep,:] = fit_svm_dskl_emp(X,Y,Xtest,Ytest,nExpandSamples=nExpand,its=its,nPredSamples=cond,eta=eta,C=C)
+            Erks[irep,:] = fit_svm_dskl_rks(X,Y,Xtest,Ytest,nExpandSamples=nExpand,its=its,nPredSamples=cond,eta=eta,C=C)
+            Ebatch[irep,:] = fit_svm_batch(X,Y,Xtest,Ytest,1.)
+
+        pl.clf()
+        pl.plot(Erks.mean(axis=0),'k-')
+        pl.plot(Eemp.mean(axis=0),'k.')
+        pl.plot(EempFix.mean(axis=0),'k--')
+        leg.append("Rks")
+        leg.append("Emp")
+        leg.append("Emp_{Fix}")
+    
+        pl.plot(Ebatch.mean()*sp.ones(Eemp.shape[1]),'k:')
+        leg.append("Batch")
+        if idx==0:pl.legend(leg,loc=3)
+        pl.title("nPred=%d"%cond)
+        pl.ylim((0,.55))
+        #pl.axis('tight')
+        pl.savefig("rks_emp_comparison-expand-%d-pred-%d.pdf"%(nExpand,cond))
+
+
+def run_comparison_expand(N=100,features=4,nExpandSamples=[1,5,10,50],its=100,reps=10):
+    noise = 0.2
+    C = .001
+    eta = 1.
+    nPred = 20
+    pl.ion()
+    pl.figure(figsize=(6,4.5))
     colors = "brymcwg"
     leg = []
     for idx,cond in enumerate(nExpandSamples):
@@ -64,20 +106,22 @@ def run_comparison_expand(N=50,features=2,nExpandSamples=[1,5,10,50],its=100,rep
         pl.plot(EempFix.mean(axis=0),'k--')
         leg.append("Rks")
         leg.append("Emp")
-        leg.append("Emp_{Fix}")
-    
+        leg.append("Emp$_{Fix}$")
         pl.plot(Ebatch.mean()*sp.ones(Eemp.shape[1]),'k:')
         leg.append("Batch")
         if idx==0:pl.legend(leg,loc=3)
         pl.title("nExpand=%d"%cond)
+        pl.xlabel("Iterations") 
+        pl.ylabel("Error")
+        pl.axis('tight')
         pl.ylim((0,.55))
-        #pl.axis('tight')
-        pl.savefig("rks_emp_comparison-expand-%d.pdf"%cond)
+        pl.savefig("rks_emp_comparison-pred-%d-expand-%d.pdf"%(nPred,cond))
 
 def fit_svm_batch(X,Y,Xtest,Ytest,gamma):
     batchsvm = SVC(gamma=gamma)
     batchsvm.fit(X.T,Y)
     return sp.mean(Ytest!=batchsvm.predict(Xtest.T))
+
 
 def fit_svm_dskl_emp(X,Y,Xtest,Ytest,its=100,eta=1.,C=.1,nPredSamples=10,nExpandSamples=10, kernel=(GaussianKernel,(1.))):
     Wemp = sp.randn(len(Y))
