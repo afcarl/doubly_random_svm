@@ -4,16 +4,132 @@ from numpy.random import multivariate_normal as mvn
 import sklearn
 import pdb
 from scipy.spatial.distance import cdist
-from sklearn.svm import SVC
+from sklearn import svm
+from sklearn.grid_search import GridSearchCV
 from sklearn.datasets import fetch_mldata,make_gaussian_quantiles
+from sklearn.base import BaseEstimator, ClassifierMixin
 
-custom_data_home = "."
+custom_data_home = "~/Data/"
 
 def GaussianKernel(X1, X2, sigma):
-   assert(X1.shape[0] == X2.shape[0])
-   K = cdist(X1.T, X2.T, 'euclidean')
-   K = sp.exp(-(K ** 2) / (2. * sigma ** 2))
-   return K
+    assert(X1.shape[0] == X2.shape[0])
+    if sp.sparse.issparse(X1): X1 = sp.array(X1.todense())
+    if sp.sparse.issparse(X2): X2 = sp.array(X2.todense())
+    K = cdist(X1.T, X2.T, 'euclidean')
+    K = sp.exp(-(K ** 2) / (2. * sigma ** 2))
+    return K
+
+class DSEKL(BaseEstimator, ClassifierMixin):
+    """
+    Doubly Stochastic Empirical Kernel Learning (for now only with SVM and RBF kernel)
+    """
+    def __init__(self,n_expand_samples=100,n_pred_samples=100,n_its=100,eta=1.,C=.001,gamma=1.):
+        self.n_expand_samples=n_expand_samples
+        self.n_pred_samples=n_pred_samples
+        self.n_its = n_its
+        self.eta = eta
+        self.C = C
+        self.gamma = gamma
+        pass
+
+    def fit(self, X, y):
+        self.classes_ = sp.unique(y)
+        assert(all(self.classes_==[-1.,1.]))
+        self.X = X
+        self.y = y
+        self.w = sp.randn(len(y))
+
+        for it in range(1,self.n_its+1):
+            self.take_gradient_step(it)
+
+        return self
+
+    def predict(self, Xtest):
+        K,rnexpand = self.sample_kernel_test(Xtest)
+        return sp.sign(K.dot(self.w[rnexpand]) + 1e-30)
+
+    def sample_kernel(self):
+        # get some random indices for predictions (the minibatch on which to compute the gradient)
+        if self.n_pred_samples<1: rnpred=range(len(self.y))
+        else: rnpred = sp.random.randint(low=0,high=len(self.y),size=self.n_pred_samples)
+        K,rnexpand = self.sample_kernel_test(self.X[rnpred,:])
+        return K,rnpred,rnexpand
+    
+    def sample_kernel_test(self,Xtest):
+        # compute predictions for all test data
+        rnpred=range(Xtest.shape[0])
+        # get some random indices for expanding the empirical kernel map
+        if self.n_expand_samples<1:rnexpand=range(len(self.y))
+        else: rnexpand = sp.random.randint(low=0,high=len(self.y),size=self.n_expand_samples)
+        # check if data matrix is sparse
+        if sp.sparse.issparse(self.X): 
+            Xexpand = sp.array(self.X[rnexpand,:].todense()).T
+        else: 
+            Xexpand = self.X[rnexpand,:].T
+        # check if test data matrix is sparse
+        if sp.sparse.issparse(Xtest): 
+            Xtest = sp.array(Xtest.todense()).T
+        else: 
+            Xtest = Xtest.T
+            
+        # compute kernel for random sample
+        K = GaussianKernel(Xtest,Xexpand,self.gamma)
+        return K,rnexpand
+
+    def take_gradient_step(self,step_size):
+        # take random sample from kernel matrix
+        K,rnpred,rnexpand = self.sample_kernel()
+        # compute prediction 
+        yhat = K.dot(self.w[rnexpand])    
+        # compute whether or not prediction is in margin
+        inmargin = (yhat * self.y[rnpred]) <= 1
+        # compute gradient for 
+        G = self.C * self.w[rnexpand] - (self.y[rnpred] * inmargin).dot(K)
+        self.w[rnexpand] -= step_size * G
+        return G
+
+    def transform(self, Xtest): return self.predict(Xtest)
+
+
+def run_realdata(reps=10,dname="covertype"):
+    print "Loading %s"%dname
+    if dname == 'covertype':
+        dd = fetch_mldata('covtype.binary', data_home=custom_data_home)
+        Xtotal = dd.data.T
+        Ytotal = sp.sign(dd.target - 1.5)#covertype['data'].T.shape[1]    
+    if dname == 'mnist':
+        dd = sklearn.datasets.load_digits(2)
+        Xtotal = dd.data.T
+        Ytotal = sp.sign(dd.target - .5)#covertype['data'].T.shape[1]    
+    params = {
+            'n_pred_samples': [10,100],
+            'n_expand_samples': [10,100],
+            'n_its':[1000],
+            'eta':[1.],
+            'C':10.**sp.arange(-3,3,2),
+            'gamma':[1000.,10000]
+            }
+
+    N = sp.minimum(dd.data.shape[0],1000)
+    
+    Eemp,Ebatch = [],[]
+
+    for irep in range(reps):
+        idx = sp.random.randint(low=0,high=Xtotal.shape[1],size=N)
+        X = Xtotal[:,idx[:N/2]]
+        Y = Ytotal[idx[:N/2]]
+        Xtest = Xtotal[:,idx[N/2:]]
+        Ytest = Ytotal[idx[N/2:]]
+        print "Training empirical"
+        clf = GridSearchCV(DSEKL(),params).fit(X.T,Y)
+        Eemp.append(sp.mean(clf.best_estimator_.transform(Xtest.T)!=Ytest))
+        clf_batch = GridSearchCV(svm.SVC(),{'C':params['C'],'gamma':params['gamma']}).fit(X.T,Y)
+        Ebatch.append(sp.mean(clf_batch.best_estimator_.predict(Xtest.T)!=Ytest))
+        print "Emp: %0.2f - Batch: %0.2f"%(Eemp[-1],Ebatch[-1])
+        print clf.best_estimator_.get_params()
+        print clf_batch.best_estimator_.get_params()
+
+    print "Emp_avg: %0.2f+-%0.2f - Ebatch_avg: %0.2f+-%0.2f"%(sp.array(Eemp).mean(),sp.array(Eemp).std(),sp.array(Ebatch).mean(),sp.array(Ebatch).std())
 
 def fit_svm_kernel(X,Y,its=30,eta=1.,C=.1,kernel=(GaussianKernel,(1.)),nPredSamples=10,nExpandSamples=10):
     D,N = X.shape[0],X.shape[1]
@@ -29,22 +145,22 @@ def fit_svm_kernel(X,Y,its=30,eta=1.,C=.1,kernel=(GaussianKernel,(1.)),nPredSamp
         W[rnexpand] -= eta/(it+1.) * G
 	
     return W
-def run_comparison_pred(N=50,features=2,nPredSamples=[1,5,10,50],its=100,reps=100):
+def run_comparison_pred(N=100,features=2,nPredSamples=[1,20,50],its=100,reps=100):
     noise = 0.2
-    C = .1
+    C = .001
     eta = 1.
-    nExpand = 50
+    nExpand = 20
     pl.ion()
-    pl.figure(figsize=(8,4))
+    pl.figure(figsize=(6,4.5))
     colors = "brymcwg"
     leg = []
     for idx,cond in enumerate(nPredSamples):
         Eemp, Erks, Ebatch, EempFix = sp.zeros((reps,its)), sp.zeros((reps,its)), sp.zeros((reps,its)), sp.zeros((reps,its))
         for irep in range(reps):
-            #X,Y = make_data_xor(N*2,noise=noise)
-            X,Y = make_gaussian_quantiles(n_classes=2,n_samples=N*2,n_features=features)
-            Y=sp.sign(Y-.5)
-            X = X.T
+            X,Y = make_data_xor(N*2,noise=noise)
+            #X,Y = make_gaussian_quantiles(n_classes=2,n_samples=N*2,n_features=features)
+            #Y=sp.sign(Y-.5)
+            #X = X.T
             # split into train and test
             Xtest = X[:,:len(Y)/2]
             Ytest = Y[:len(Y)/2]
@@ -68,12 +184,15 @@ def run_comparison_pred(N=50,features=2,nPredSamples=[1,5,10,50],its=100,reps=10
         leg.append("Batch")
         if idx==0:pl.legend(leg,loc=3)
         pl.title("nPred=%d"%cond)
+        pl.xlabel("Iterations") 
+        pl.ylabel("Error")
+        pl.axis('tight')
         pl.ylim((0,.55))
         #pl.axis('tight')
         pl.savefig("rks_emp_comparison-expand-%d-pred-%d.pdf"%(nExpand,cond))
 
 
-def run_comparison_expand(N=100,features=4,nExpandSamples=[1,5,10,50],its=100,reps=10):
+def run_comparison_expand(N=100,features=4,nExpandSamples=[1,20,50],its=100,reps=100):
     noise = 0.2
     C = .001
     eta = 1.
@@ -128,8 +247,13 @@ def fit_svm_dskl_emp(X,Y,Xtest,Ytest,its=100,eta=1.,C=.1,nPredSamples=10,nExpand
     Eemp = []
 
     for it in range(1,its+1):
+        Wempold = Wemp
         Wemp = step_dskl_empirical(X,Y,Wemp,eta/it,C,kernel,nPredSamples,nExpandSamples)
-        Eemp.append(sp.mean(Ytest != sp.sign(predict_svm_emp(X,Xtest,Wemp,kernel)))) 
+        diffW = Wempold.T.dot(Wemp)
+        evaluateOn = sp.random.randint(low=0,high=X.shape[1],size=nPredSamples)
+        Eemp.append(sp.mean(Ytest[evaluateOn] != sp.sign(predict_svm_emp(X[:,evaluateOn],Xtest[:,evaluateOn],Wemp[evaluateOn],kernel)))) 
+        #print "Error: %0.2f - diff norm:  %f"%(Eemp[-1], diffW)
+
     return Eemp
 
 def fit_svm_dskl_rks(X,Y,Xtest,Ytest,its=100,eta=1.,C=.1,nPredSamples=10,nExpandSamples=10, kernel=(GaussianKernel,(1.))):
@@ -142,6 +266,7 @@ def fit_svm_dskl_rks(X,Y,Xtest,Ytest,its=100,eta=1.,C=.1,nPredSamples=10,nExpand
     for it in range(1,its+1):
         Wrks = step_dskl_rks(X,Y,Wrks,Zrks,eta/it,C,nPredSamples,nExpandSamples)
         Erks.append(sp.mean(Ytest != sp.sign(predict_svm_rks(Xtest,Wrks,Zrks))))
+        print "Error: %0.2f"%Erks[-1]
     return Erks
 
 def fit_svm_dskl_comparison(X,Y,its=100,eta=1.,C=.1,nPredSamples=10,nExpandSamples=10, kernel=(GaussianKernel,(1.))):
@@ -171,6 +296,7 @@ def fit_svm_dskl_comparison(X,Y,its=100,eta=1.,C=.1,nPredSamples=10,nExpandSampl
 def step_dskl_rks(X,Y,W,Z,eta=1.,C=.1,nPredSamples=10,nExpandSamples=10):
     rnpred = sp.random.randint(low=0,high=X.shape[1],size=nPredSamples)
     rnexpand = sp.random.randint(low=0,high=W.shape[0],size=nExpandSamples)
+    if sp.sparse.issparse(X): X = sp.array(X.todense())
     # compute rks features
     rks_feats = sp.exp(Z[rnexpand,:].dot(X[:,rnpred])) / sp.sqrt(nPredSamples)
     # compute prediction
@@ -182,7 +308,9 @@ def step_dskl_rks(X,Y,W,Z,eta=1.,C=.1,nPredSamples=10,nExpandSamples=10):
     W[rnexpand] -= eta * G
     return W
 
-def predict_svm_rks(X,W,Z):return W.T.dot(sp.exp(Z.dot(X))/sp.sqrt(X.shape[1]))
+def predict_svm_rks(X,W,Z):
+    if sp.sparse.issparse(X): X = sp.array(X.todense())
+    return W.T.dot(sp.exp(Z.dot(X))/sp.sqrt(X.shape[1]))
 
 def step_dskl_empirical(X,Y,W,eta=1.,C=.1,kernel=(GaussianKernel,(1.)),nPredSamples=10,nExpandSamples=10):
     if nPredSamples==0: rnpred=range(len(Y))
@@ -196,6 +324,8 @@ def step_dskl_empirical(X,Y,W,eta=1.,C=.1,kernel=(GaussianKernel,(1.)),nPredSamp
     return W
 
 def compute_gradient(y,Xpred,Xexpand,w,kernel,C):
+    if sp.sparse.issparse(Xpred): Xpred = sp.array(Xpred.todense())
+    if sp.sparse.issparse(Xexpand): Xexpand = sp.array(Xexpand.todense())
     # compute kernel for random sample
     K = kernel[0](Xpred,Xexpand,kernel[1])
     # compute prediction 
