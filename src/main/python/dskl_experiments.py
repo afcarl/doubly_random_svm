@@ -37,7 +37,7 @@ class DSEKL(BaseEstimator, ClassifierMixin):
         assert(all(self.classes_==[-1.,1.]))
         self.X = X
         self.y = y
-        self.w = sp.randn(len(y))
+        self.w = sp.float128(sp.randn(len(y)))
 
         for it in range(1,self.n_its+1):
             self.take_gradient_step(it)
@@ -46,7 +46,9 @@ class DSEKL(BaseEstimator, ClassifierMixin):
 
     def predict(self, Xtest):
         K,rnexpand = self.sample_kernel_test(Xtest)
-        return sp.sign(K.dot(self.w[rnexpand]) + 1e-30)
+        yhat = sp.sign(K.dot(self.w[rnexpand]) + 1e-30)
+        yhat[sp.isnan(yhat)] = -1.
+        return yhat
 
     def sample_kernel(self):
         # get some random indices for predictions (the minibatch on which to compute the gradient)
@@ -105,9 +107,9 @@ def run_realdata(reps=10,dname="covertype"):
             'n_pred_samples': [10,100],
             'n_expand_samples': [10,100],
             'n_its':[1000],
-            'eta':[1.],
-            'C':10.**sp.arange(-3,3,2),
-            'gamma':[1000.,10000]
+            'eta':[0.1,1.,10.],
+            'C':10.**sp.arange(-5,5),
+            'gamma':10.**sp.arange(-4,4)
             }
 
     N = sp.minimum(dd.data.shape[0],1000)
@@ -124,6 +126,7 @@ def run_realdata(reps=10,dname="covertype"):
         clf = GridSearchCV(DSEKL(),params).fit(X.T,Y)
         Eemp.append(sp.mean(clf.best_estimator_.transform(Xtest.T)!=Ytest))
         clf_batch = GridSearchCV(svm.SVC(),{'C':params['C'],'gamma':params['gamma']}).fit(X.T,Y)
+        #clf_batch = GridSearchCV(svm.SVC(),{'C':10.**sp.arange(-5,5),'gamma':10.**sp.arange(-3,3)}).fit(X.T,Y)
         Ebatch.append(sp.mean(clf_batch.best_estimator_.predict(Xtest.T)!=Ytest))
         print "Emp: %0.2f - Batch: %0.2f"%(Eemp[-1],Ebatch[-1])
         print clf.best_estimator_.get_params()
