@@ -106,10 +106,10 @@ def run_realdata(reps=10,dname="covertype"):
     params = {
             'n_pred_samples': [10,100],
             'n_expand_samples': [10,100],
-            'n_its':[1000],
+            'n_its':[100],
             'eta':[0.1,1.,10.],
-            'C':10.**sp.arange(-5,5),
-            'gamma':10.**sp.arange(-4,4)
+            'C':10.**sp.arange(-5,5,2),
+            'gamma':10.**sp.arange(-4,4,2)
             }
 
     N = sp.minimum(dd.data.shape[0],1000)
