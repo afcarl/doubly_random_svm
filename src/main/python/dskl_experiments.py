@@ -46,9 +46,7 @@ class DSEKL(BaseEstimator, ClassifierMixin):
 
     def predict(self, Xtest):
         K,rnexpand = self.sample_kernel_test(Xtest)
-        yhat = sp.sign(K.dot(self.w[rnexpand]) + 1e-30)
-        yhat[sp.isnan(yhat)] = -1.
-        return yhat
+        return sp.sign(K.dot(self.w[rnexpand]) + 1e-30) 
 
     def sample_kernel(self):
         # get some random indices for predictions (the minibatch on which to compute the gradient)
