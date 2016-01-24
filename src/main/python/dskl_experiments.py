@@ -161,7 +161,7 @@ def run_realdata(reps=10,dname="covertype"):
         print "Training empirical"
         clf = GridSearchCV(DSEKL(),params).fit(Xtrain,Ytrain)
         Eemp.append(sp.mean(clf.best_estimator_.transform(Xtest)!=Ytest))
-        clf_batch = GridSearchCV(svm.SVC(),{'C':params['C'],'gamma':params['gamma']}).fit(Xtrain,Y)
+        clf_batch = GridSearchCV(svm.SVC(),{'C':params['C'],'gamma':params['gamma']}).fit(Xtrain,Ytrain)
         Ebatch.append(sp.mean(clf_batch.best_estimator_.predict(Xtest)!=Ytest))
         print "Emp: %0.2f - Batch: %0.2f"%(Eemp[-1],Ebatch[-1])
         print clf.best_estimator_.get_params()
