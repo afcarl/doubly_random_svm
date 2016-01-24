@@ -11,8 +11,9 @@ from sklearn import svm
 from sklearn.grid_search import GridSearchCV
 from sklearn.datasets import fetch_mldata,make_gaussian_quantiles
 from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.preprocessing import StandardScaler
 
-custom_data_home = "/home/biessman/data/"#"/Users/biessman/Data/"
+custom_data_home = "/Users/biessman/Data/"
 
 def GaussianKernel(X1, X2, sigma):
     assert(X1.shape[0] == X2.shape[0])
@@ -102,60 +103,66 @@ def get_svmlight_file(fn):
         urllib.urlretrieve(url,fn)
     return load_svmlight_file(fn)
 
-def run_all_realdata(dnames=['covertype','diabetes','gisette','news']):
+def run_all_realdata(dnames=['gisette','news','covertype','diabetes']):
     [run_realdata(dname=d) for d in dnames]
 
 def run_realdata(reps=10,dname="covertype"):
     print "Loading %s"%dname
     if dname == 'covertype':
         dd = fetch_mldata('covtype.binary', data_home=custom_data_home)
-        Xtotal = dd.data.T
+        Xtotal = dd.data
         Ytotal = sp.sign(dd.target - 1.5)
     elif dname == 'mnist':
         dd = sklearn.datasets.load_digits(2)
-        Xtotal = zscore(dd.data.T,axis=1)
+        Xtotal = dd.data
         Ytotal = sp.sign(dd.target - .5) 
     elif dname == 'breast':
         Xtotal,Ytotal = get_svmlight_file("breast-cancer_scale")
-        Xtotal = zscore(Xtotal.T,axis=1)
+        Xtotal = Xtotal
         Ytotal = Ytotal - 3 
     elif dname == 'diabetes':
         Xtotal,Ytotal = get_svmlight_file("diabetes_scale")
-        Xtotal = zscore(Xtotal.T,axis=1)
+        Xtotal = Xtotal
         Ytotal = Ytotal
     elif dname == 'news':
         Xtotal,Ytotal = get_svmlight_file("news20.binary.bz2")
-        Xtotal = zscore(Xtotal.T,axis=1)
+        Xtotal = Xtotal
         Ytotal = Ytotal
     elif dname == 'gisette':
         Xtotal,Ytotal = get_svmlight_file("gisette_scale.bz2")
-        Xtotal = zscore(Xtotal.T,axis=1)
+        Xtotal = Xtotal
         Ytotal = Ytotal
 
     params = {
-            'n_pred_samples': [1000],
+            'n_pred_samples': [100],
             'n_expand_samples': [1000],
-            'n_its':[1000],
-            'eta':[0.1,1.,10],
+            'n_its':[100],
+            'eta':[1.],
             'C':10.**sp.arange(-6,2,2),
             'gamma':10.**sp.arange(-4,4,2)
             }
  
-    N = sp.minimum(Xtotal.shape[1],10000)
+    N = sp.minimum(Xtotal.shape[1],1000)
     
     Eemp,Ebatch = [],[]
 
     for irep in range(reps):
         idx = sp.random.randint(low=0,high=Xtotal.shape[1],size=N)
-        X = Xtotal[:,idx[:N/2]]
-        Y = Ytotal[idx[:N/2]]
-        Xtest = Xtotal[:,idx[N/2:]]
-        Ytest = Ytotal[idx[N/2:]]
+        Xtrain = Xtotal[idx[:N/2],:]
+        Ytrain = Ytotal[idx[:N/2]]
+        Xtest = Xtotal[idx[N/2:],:]
+        Ytest = Ytotal[idx[N/2:]]        
+        if not sp.sparse.issparse(Xtrain): 
+            scaler = StandardScaler()
+            scaler.fit(Xtrain)  # Don't cheat - fit only on training data
+            Xtrain = scaler.transform(Xtrain)
+            Xtest = scaler.transform(Xtest)
+
         print "Training empirical"
-        clf = GridSearchCV(DSEKL(),params).fit(X.T,Y)
-        Eemp.append(sp.mean(clf.best_estimator_.transform(Xtest.T)!=Ytest))
-        clf_batch = GridSearchCV(svm.SVC(),{'C':params['C'],'gamma':params['gamma']}).fit(X.T,Y)
-        Ebatch.append(sp.mean(clf_batch.best_estimator_.predict(Xtest.T)!=Ytest))
+        clf = GridSearchCV(DSEKL(),params).fit(Xtrain,Ytrain)
+        Eemp.append(sp.mean(clf.best_estimator_.transform(Xtest)!=Ytest))
+        clf_batch = GridSearchCV(svm.SVC(),{'C':params['C'],'gamma':params['gamma']}).fit(Xtrain,Y)
+        Ebatch.append(sp.mean(clf_batch.best_estimator_.predict(Xtest)!=Ytest))
         print "Emp: %0.2f - Batch: %0.2f"%(Eemp[-1],Ebatch[-1])
         print clf.best_estimator_.get_params()
         print clf_batch.best_estimator_.get_params()
