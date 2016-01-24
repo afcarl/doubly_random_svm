@@ -1,5 +1,6 @@
 import pylab as pl
 import scipy as sp
+from scipy.stats.mstats import zscore
 from numpy.random import multivariate_normal as mvn
 import sklearn
 import pdb
@@ -11,7 +12,7 @@ from sklearn.grid_search import GridSearchCV
 from sklearn.datasets import fetch_mldata,make_gaussian_quantiles
 from sklearn.base import BaseEstimator, ClassifierMixin
 
-custom_data_home = "/Users/biessman/Data/"
+custom_data_home = "/home/biessman/data/"#"/Users/biessman/Data/"
 
 def GaussianKernel(X1, X2, sigma):
     assert(X1.shape[0] == X2.shape[0])
@@ -112,32 +113,32 @@ def run_realdata(reps=10,dname="covertype"):
         Ytotal = sp.sign(dd.target - 1.5)
     elif dname == 'mnist':
         dd = sklearn.datasets.load_digits(2)
-        Xtotal = dd.data.T
+        Xtotal = zscore(dd.data.T,axis=1)
         Ytotal = sp.sign(dd.target - .5) 
     elif dname == 'breast':
         Xtotal,Ytotal = get_svmlight_file("breast-cancer_scale")
-        Xtotal = Xtotal.T
+        Xtotal = zscore(Xtotal.T,axis=1)
         Ytotal = Ytotal - 3 
     elif dname == 'diabetes':
         Xtotal,Ytotal = get_svmlight_file("diabetes_scale")
-        Xtotal = Xtotal.T
+        Xtotal = zscore(Xtotal.T,axis=1)
         Ytotal = Ytotal
     elif dname == 'news':
         Xtotal,Ytotal = get_svmlight_file("news20.binary.bz2")
-        Xtotal = Xtotal.T
+        Xtotal = zscore(Xtotal.T,axis=1)
         Ytotal = Ytotal
     elif dname == 'gisette':
         Xtotal,Ytotal = get_svmlight_file("gisette_scale.bz2")
-        Xtotal = Xtotal.T
+        Xtotal = zscore(Xtotal.T,axis=1)
         Ytotal = Ytotal
 
     params = {
-            'n_pred_samples': [10,100],
-            'n_expand_samples': [10,100],
-            'n_its':[100],
-            'eta':[0.1,1.],
-            'C':10.**sp.arange(-5,5,1),
-            'gamma':10.**sp.arange(-4,4,1)
+            'n_pred_samples': [1000],
+            'n_expand_samples': [1000],
+            'n_its':[1000],
+            'eta':[0.1,1.,10],
+            'C':10.**sp.arange(-6,2,2),
+            'gamma':10.**sp.arange(-4,4,2)
             }
  
     N = sp.minimum(Xtotal.shape[1],10000)
