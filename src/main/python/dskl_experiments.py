@@ -177,7 +177,7 @@ def fit_svm_kernel(X,Y,its=30,eta=1.,C=.1,kernel=(GaussianKernel,(1.)),nPredSamp
     return W
 def run_comparison_pred(N=100,features=2,nPredSamples=[1,20,50],its=100,reps=100):
     noise = 0.2
-    C = .001
+    C = .1
     eta = 1.
     nExpand = 20
     pl.ion()
@@ -224,7 +224,7 @@ def run_comparison_pred(N=100,features=2,nPredSamples=[1,20,50],its=100,reps=100
 
 def run_comparison_expand(N=100,features=4,nExpandSamples=[1,20,50],its=100,reps=100):
     noise = 0.2
-    C = .001
+    C = .1
     eta = 1.
     nPred = 20
     pl.ion()
@@ -267,7 +267,7 @@ def run_comparison_expand(N=100,features=4,nExpandSamples=[1,20,50],its=100,reps
         pl.savefig("rks_emp_comparison-pred-%d-expand-%d.pdf"%(nPred,cond))
 
 def fit_svm_batch(X,Y,Xtest,Ytest,gamma):
-    batchsvm = SVC(gamma=gamma)
+    batchsvm = svm.SVC(gamma=gamma)
     batchsvm.fit(X.T,Y)
     return sp.mean(Ytest!=batchsvm.predict(Xtest.T))
 
@@ -280,7 +280,9 @@ def fit_svm_dskl_emp(X,Y,Xtest,Ytest,its=100,eta=1.,C=.1,nPredSamples=10,nExpand
         Wempold = Wemp
         Wemp = step_dskl_empirical(X,Y,Wemp,eta/it,C,kernel,nPredSamples,nExpandSamples)
         diffW = Wempold.T.dot(Wemp)
-        evaluateOn = sp.random.randint(low=0,high=X.shape[1],size=nPredSamples)
+        # for toy data sets we evaluate on all samples (but train on a small subset only)
+        evaluateOn = range(len(Y))
+        #evaluateOn = sp.random.randint(low=0,high=X.shape[1],size=nPredSamples)
         Eemp.append(sp.mean(Ytest[evaluateOn] != sp.sign(predict_svm_emp(X[:,evaluateOn],Xtest[:,evaluateOn],Wemp[evaluateOn],kernel)))) 
         #print "Error: %0.2f - diff norm:  %f"%(Eemp[-1], diffW)
 
