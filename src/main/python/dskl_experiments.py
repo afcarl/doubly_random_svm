@@ -103,7 +103,7 @@ def get_svmlight_file(fn):
         urllib.urlretrieve(url,fn)
     return load_svmlight_file(fn)
 
-def run_all_realdata(dnames=['gisette','news','covertype','diabetes']):
+def run_all_realdata(dnames=['sonar','mushroom','skin_nonskin','covertype','diabetes','gisette']):
     [run_realdata(dname=d) for d in dnames]
 
 def run_realdata(reps=10,dname="covertype"):
@@ -118,36 +118,40 @@ def run_realdata(reps=10,dname="covertype"):
         Ytotal = sp.sign(dd.target - .5) 
     elif dname == 'breast':
         Xtotal,Ytotal = get_svmlight_file("breast-cancer_scale")
-        Xtotal = Xtotal
         Ytotal = Ytotal - 3 
     elif dname == 'diabetes':
         Xtotal,Ytotal = get_svmlight_file("diabetes_scale")
-        Xtotal = Xtotal
-        Ytotal = Ytotal
     elif dname == 'news':
         Xtotal,Ytotal = get_svmlight_file("news20.binary.bz2")
-        Xtotal = Xtotal
-        Ytotal = Ytotal
     elif dname == 'gisette':
         Xtotal,Ytotal = get_svmlight_file("gisette_scale.bz2")
-        Xtotal = Xtotal
-        Ytotal = Ytotal
+    elif dname == 'skin_nonskin':
+        Xtotal,Ytotal = get_svmlight_file("skin_nonskin")
+        Ytotal = sp.sign(Ytotal - 1.5)
+    elif dname == 'sonar':
+        Xtotal,Ytotal = get_svmlight_file("sonar_scale")
+    elif dname == 'mushrooms':
+        Xtotal,Ytotal = get_svmlight_file("mushrooms")
+        Ytotal = sp.sign(Ytotal - 1.5)
+    elif dname == 'madelon':
+        Xtotal,Ytotal = get_svmlight_file("mushrooms")
+        Ytotal = sp.sign(Ytotal - 1.5)
 
     params = {
             'n_pred_samples': [100],
-            'n_expand_samples': [1000],
+            'n_expand_samples': [100],
             'n_its':[100],
             'eta':[1.],
-            'C':10.**sp.arange(-6,2,2),
-            'gamma':10.**sp.arange(-4,4,2)
+            'C':10.**sp.arange(-6,2,1),
+            'gamma':10.**sp.arange(-4,4,1)
             }
  
-    N = sp.minimum(Xtotal.shape[1],1000)
+    N = sp.minimum(Xtotal.shape[0],1000)
     
     Eemp,Ebatch = [],[]
 
     for irep in range(reps):
-        idx = sp.random.randint(low=0,high=Xtotal.shape[1],size=N)
+        idx = sp.random.randint(low=0,high=Xtotal.shape[0],size=N)
         Xtrain = Xtotal[idx[:N/2],:]
         Ytrain = Ytotal[idx[:N/2]]
         Xtest = Xtotal[idx[N/2:],:]
@@ -159,9 +163,9 @@ def run_realdata(reps=10,dname="covertype"):
             Xtest = scaler.transform(Xtest)
 
         print "Training empirical"
-        clf = GridSearchCV(DSEKL(),params).fit(Xtrain,Ytrain)
+        clf = GridSearchCV(DSEKL(),params,n_jobs=-2,verbose=1,cv=2).fit(Xtrain,Ytrain)
         Eemp.append(sp.mean(clf.best_estimator_.transform(Xtest)!=Ytest))
-        clf_batch = GridSearchCV(svm.SVC(),{'C':params['C'],'gamma':params['gamma']}).fit(Xtrain,Ytrain)
+        clf_batch = GridSearchCV(svm.SVC(),{'C':params['C'],'gamma':params['gamma']},n_jobs=-2,verbose=1,cv=2).fit(Xtrain,Ytrain)
         Ebatch.append(sp.mean(clf_batch.best_estimator_.predict(Xtest)!=Ytest))
         print "Emp: %0.2f - Batch: %0.2f"%(Eemp[-1],Ebatch[-1])
         print clf.best_estimator_.get_params()
