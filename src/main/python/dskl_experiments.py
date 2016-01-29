@@ -15,6 +15,19 @@ from sklearn.preprocessing import StandardScaler
 
 custom_data_home = "/Users/biessman/Data/"
 
+def GaussKernMini(X1,X2,sigma):
+    if sp.sparse.issparse(X1):
+        G = sp.outer(X1.multiply(X1).sum(axis=0),sp.ones(X2.shape[1]))
+    else:
+        G = sp.outer((X1 * X1).sum(axis=0),sp.ones(X2.shape[1]))
+    if sp.sparse.issparse(X2):
+        H = sp.outer(X2.multiply(X2).sum(axis=0),sp.ones(X1.shape[1]))
+    else:
+        H = sp.outer((X2 * X2).sum(axis=0),sp.ones(X1.shape[1]))
+    K = sp.exp(-(G + H.T - 2.*(X1.T.dot(X2)))/(2.*sigma**2))
+    if sp.sparse.issparse(X1) | sp.sparse.issparse(X2): K = sp.array(K)
+    return K
+
 def GaussianKernel(X1, X2, sigma):
     assert(X1.shape[0] == X2.shape[0])
     if sp.sparse.issparse(X1): X1 = sp.array(X1.todense())
@@ -65,26 +78,16 @@ class DSEKL(BaseEstimator, ClassifierMixin):
         # get some random indices for expanding the empirical kernel map
         if self.n_expand_samples<1:rnexpand=range(len(self.y))
         else: rnexpand = sp.random.randint(low=0,high=len(self.y),size=self.n_expand_samples)
-        # check if data matrix is sparse
-        if sp.sparse.issparse(self.X): 
-            Xexpand = sp.array(self.X[rnexpand,:].todense()).T
-        else: 
-            Xexpand = self.X[rnexpand,:].T
-        # check if test data matrix is sparse
-        if sp.sparse.issparse(Xtest): 
-            Xtest = sp.array(Xtest.todense()).T
-        else: 
-            Xtest = Xtest.T
-            
         # compute kernel for random sample
-        K = GaussianKernel(Xtest,Xexpand,self.gamma)
+        K = GaussKernMini(Xtest.T,self.X[rnexpand,:].T,self.gamma)
         return K,rnexpand
 
     def take_gradient_step(self,step_size):
+        
         # take random sample from kernel matrix
         K,rnpred,rnexpand = self.sample_kernel()
         # compute prediction 
-        yhat = K.dot(self.w[rnexpand])    
+        yhat = K.dot(self.w[rnexpand]) 
         # compute whether or not prediction is in margin
         inmargin = (yhat * self.y[rnpred]) <= 1
         # compute gradient for 
@@ -106,7 +109,7 @@ def get_svmlight_file(fn):
 def run_all_realdata(dnames=['sonar','mushroom','skin_nonskin','covertype','diabetes','gisette']):
     [run_realdata(dname=d) for d in dnames]
 
-def run_realdata(reps=10,dname="covertype"):
+def run_realdata(reps=2,dname="mushrooms"):
     print "Loading %s"%dname
     if dname == 'covertype':
         dd = fetch_mldata('covtype.binary', data_home=custom_data_home)
@@ -139,11 +142,11 @@ def run_realdata(reps=10,dname="covertype"):
 
     params = {
             'n_pred_samples': [100],
-            'n_expand_samples': [100],
+            'n_expand_samples': [1000],
             'n_its':[100],
             'eta':[1.],
-            'C':10.**sp.arange(-6,2,1),
-            'gamma':10.**sp.arange(-4,4,1)
+            'C':[0.0001],#10.**sp.arange(-8,4,3),
+            'gamma':[.1]#10.**sp.arange(-4.,4.,3)
             }
  
     N = sp.minimum(Xtotal.shape[0],1000)
@@ -170,8 +173,9 @@ def run_realdata(reps=10,dname="covertype"):
         print "Emp: %0.2f - Batch: %0.2f"%(Eemp[-1],Ebatch[-1])
         print clf.best_estimator_.get_params()
         print clf_batch.best_estimator_.get_params()
-
-    print "Emp_avg: %0.2f+-%0.2f - Ebatch_avg: %0.2f+-%0.2f"%(sp.array(Eemp).mean(),sp.array(Eemp).std(),sp.array(Ebatch).mean(),sp.array(Ebatch).std())
+    print "***************************************************************"
+    print "Data set [%s]: Emp_avg: %0.2f+-%0.2f - Ebatch_avg: %0.2f+-%0.2f"%(dname,sp.array(Eemp).mean(),sp.array(Eemp).std(),sp.array(Ebatch).mean(),sp.array(Ebatch).std())
+    print "***************************************************************"
 
 def fit_svm_kernel(X,Y,its=30,eta=1.,C=.1,kernel=(GaussianKernel,(1.)),nPredSamples=10,nExpandSamples=10):
     D,N = X.shape[0],X.shape[1]
@@ -310,7 +314,7 @@ def fit_svm_dskl_rks(X,Y,Xtest,Ytest,its=100,eta=1.,C=.1,nPredSamples=10,nExpand
     for it in range(1,its+1):
         Wrks = step_dskl_rks(X,Y,Wrks,Zrks,eta/it,C,nPredSamples,nExpandSamples)
         Erks.append(sp.mean(Ytest != sp.sign(predict_svm_rks(Xtest,Wrks,Zrks))))
-        print "Error: %0.2f"%Erks[-1]
+        #print "Error: %0.2f"%Erks[-1]
     return Erks
 
 def fit_svm_dskl_comparison(X,Y,its=100,eta=1.,C=.1,nPredSamples=10,nExpandSamples=10, kernel=(GaussianKernel,(1.))):
