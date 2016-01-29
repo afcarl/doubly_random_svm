@@ -15,7 +15,7 @@ from sklearn.preprocessing import StandardScaler
 from multiprocessing import Pool
 import tempfile
 from sklearn.externals.joblib.pool import has_shareable_memory
-from joblib import Parallel, delayed, dump
+from sklearn.externals.joblib import Parallel, delayed, dump, load
 import numpy as np
 import shutil
 
@@ -42,18 +42,18 @@ def GaussianKernel(X1, X2, sigma):
     K = sp.exp(-(K ** 2) / (2. * sigma ** 2))
     return K
 
-def svm_gradient(X,y,w,n_pred_samples,n_expand_samples,C=.0001,kernel=(GaussKernMini,1.0)):
+def svm_gradient(X,y,w,n_pred_samples,n_expand_samples,C=.0001,sigma=1.):
     # sample Kernel
-    rnpred = sp.random.randint(low=0,high=len(self.y),size=self.n_pred_samples)
-    rnexpand = sp.random.randint(low=0,high=len(self.y),size=self.n_expand_samples)
-    K = kernel[0](X[rnpred,:].T,X[rnexpand,:].T,kernel[1])
+    rnpred = sp.random.randint(low=0,high=len(y),size=n_pred_samples)
+    rnexpand = sp.random.randint(low=0,high=len(y),size=n_expand_samples)
+    K = GaussKernMini(X[rnpred,:].T,X[rnexpand,:].T,sigma)
     # compute predictions
-    yhat = K.dot(self.w[rnexpand]) 
+    yhat = K.dot(w[rnexpand]) 
     # compute whether or not prediction is in margin
     inmargin = (yhat * y[rnpred]) <= 1
     # compute gradient 
     G = C * w[rnexpand] - (y[rnpred] * inmargin).dot(K)
-    return G
+    return G,rnexpand
 
 
 global X
@@ -69,29 +69,36 @@ class DSEKL(BaseEstimator, ClassifierMixin):
         self.n_its = n_its
         self.eta = eta
         self.C = C
-        self.kernel = (GaussKernMini,1.0)
+        self.gamma = gamma
         pass
 
-    def fit(self, X, y):
-        folder = tempfile.mkdtemp()
-        samples_name = os.path.join(folder, 'samples')
-        dump(X, samples_name)
-        samples = load(samples_name, mmap_mode='r')
+    def fit(self, X, y, workers=10):
         self.classes_ = sp.unique(y)
-        assert(all(self.classes_==[-1.,1.]))
-        self.w = sp.float128(sp.randn(len(y)))
+        assert(all(self.classes_==[-1.,1.]))        
+        folder = tempfile.mkdtemp()
+        data_name = os.path.join(folder, 'data')
+        dump(X, data_name)
+        self.X = load(data_name, mmap_mode='r')
+        target_name = os.path.join(folder, 'target')
+        dump(y, target_name)
+        self.y = load(target_name, mmap_mode='r')
 
-        pool = Pool(3)
-        gradients = pool.map(self.take_gradient_step,range(1,self.n_its+1))
-        #for it in range(1,self.n_its+1):
-        #    self.take_gradient_step(it)
-        pdb.set_trace()
+        self.w = sp.float128(sp.randn(len(y)))
+        G = sp.ones(len(y))
+        for it in range(self.n_its/workers):
+            gradients = Parallel(n_jobs=4)(delayed(svm_gradient)(self.X, self.y,\
+                 self.w, self.n_pred_samples, self.n_pred_samples, self.C, 1.) for i in range(workers))
+            tmpw = sp.zeros(len(y))
+            for g in gradients:
+                G[g[1]] += g[0]**2
+                tmpw[g[1]] += g[0]
+            for i in tmpw.nonzero()[0]:
+                self.w[i] -= tmpw[i] / sp.sqrt(G[i])
         return self
 
-    def predict(self, Xtest, Xtrain, w):
-        rnpred = sp.random.randint(low=0,high=len(self.y),size=self.n_pred_samples)
+    def predict(self, Xtest):
         rnexpand = sp.random.randint(low=0,high=len(self.y),size=self.n_expand_samples)
-        K = self.kernel[0](Xtest,Xtrain,kernel[1])
+        K = GaussKernMini(Xtest.T,self.X[rnexpand,:].T,self.gamma)
         return sp.sign(K.dot(self.w[rnexpand])) 
 
 
