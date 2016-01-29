@@ -12,6 +12,12 @@ from sklearn.grid_search import GridSearchCV
 from sklearn.datasets import fetch_mldata,make_gaussian_quantiles
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.preprocessing import StandardScaler
+from multiprocessing import Pool
+import tempfile
+from sklearn.externals.joblib.pool import has_shareable_memory
+from joblib import Parallel, delayed, dump
+import numpy as np
+import shutil
 
 custom_data_home = "/Users/biessman/Data/"
 
@@ -36,6 +42,23 @@ def GaussianKernel(X1, X2, sigma):
     K = sp.exp(-(K ** 2) / (2. * sigma ** 2))
     return K
 
+def svm_gradient(X,y,w,n_pred_samples,n_expand_samples,C=.0001,kernel=(GaussKernMini,1.0)):
+    # sample Kernel
+    rnpred = sp.random.randint(low=0,high=len(self.y),size=self.n_pred_samples)
+    rnexpand = sp.random.randint(low=0,high=len(self.y),size=self.n_expand_samples)
+    K = kernel[0](X[rnpred,:].T,X[rnexpand,:].T,kernel[1])
+    # compute predictions
+    yhat = K.dot(self.w[rnexpand]) 
+    # compute whether or not prediction is in margin
+    inmargin = (yhat * y[rnpred]) <= 1
+    # compute gradient 
+    G = C * w[rnexpand] - (y[rnpred] * inmargin).dot(K)
+    return G
+
+
+global X
+global y
+
 class DSEKL(BaseEstimator, ClassifierMixin):
     """
     Doubly Stochastic Empirical Kernel Learning (for now only with SVM and RBF kernel)
@@ -46,54 +69,31 @@ class DSEKL(BaseEstimator, ClassifierMixin):
         self.n_its = n_its
         self.eta = eta
         self.C = C
-        self.gamma = gamma
+        self.kernel = (GaussKernMini,1.0)
         pass
 
     def fit(self, X, y):
+        folder = tempfile.mkdtemp()
+        samples_name = os.path.join(folder, 'samples')
+        dump(X, samples_name)
+        samples = load(samples_name, mmap_mode='r')
         self.classes_ = sp.unique(y)
         assert(all(self.classes_==[-1.,1.]))
-        self.X = X
-        self.y = y
         self.w = sp.float128(sp.randn(len(y)))
 
-        for it in range(1,self.n_its+1):
-            self.take_gradient_step(it)
-
+        pool = Pool(3)
+        gradients = pool.map(self.take_gradient_step,range(1,self.n_its+1))
+        #for it in range(1,self.n_its+1):
+        #    self.take_gradient_step(it)
+        pdb.set_trace()
         return self
 
-    def predict(self, Xtest):
-        K,rnexpand = self.sample_kernel_test(Xtest)
-        return sp.sign(K.dot(self.w[rnexpand]) + 1e-30) 
+    def predict(self, Xtest, Xtrain, w):
+        rnpred = sp.random.randint(low=0,high=len(self.y),size=self.n_pred_samples)
+        rnexpand = sp.random.randint(low=0,high=len(self.y),size=self.n_expand_samples)
+        K = self.kernel[0](Xtest,Xtrain,kernel[1])
+        return sp.sign(K.dot(self.w[rnexpand])) 
 
-    def sample_kernel(self):
-        # get some random indices for predictions (the minibatch on which to compute the gradient)
-        if self.n_pred_samples<1: rnpred=range(len(self.y))
-        else: rnpred = sp.random.randint(low=0,high=len(self.y),size=self.n_pred_samples)
-        K,rnexpand = self.sample_kernel_test(self.X[rnpred,:])
-        return K,rnpred,rnexpand
-    
-    def sample_kernel_test(self,Xtest):
-        # compute predictions for all test data
-        rnpred=range(Xtest.shape[0])
-        # get some random indices for expanding the empirical kernel map
-        if self.n_expand_samples<1:rnexpand=range(len(self.y))
-        else: rnexpand = sp.random.randint(low=0,high=len(self.y),size=self.n_expand_samples)
-        # compute kernel for random sample
-        K = GaussKernMini(Xtest.T,self.X[rnexpand,:].T,self.gamma)
-        return K,rnexpand
-
-    def take_gradient_step(self,step_size):
-        
-        # take random sample from kernel matrix
-        K,rnpred,rnexpand = self.sample_kernel()
-        # compute prediction 
-        yhat = K.dot(self.w[rnexpand]) 
-        # compute whether or not prediction is in margin
-        inmargin = (yhat * self.y[rnpred]) <= 1
-        # compute gradient for 
-        G = self.C * self.w[rnexpand] - (self.y[rnpred] * inmargin).dot(K)
-        self.w[rnexpand] -= step_size * G
-        return G
 
     def transform(self, Xtest): return self.predict(Xtest)
 
