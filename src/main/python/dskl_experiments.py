@@ -72,7 +72,7 @@ class DSEKL(BaseEstimator, ClassifierMixin):
         self.gamma = gamma
         pass
 
-    def fit(self, X, y, workers=10):
+    def fit(self, X, y, workers=3):
         self.classes_ = sp.unique(y)
         assert(all(self.classes_==[-1.,1.]))        
         folder = tempfile.mkdtemp()
@@ -99,7 +99,7 @@ class DSEKL(BaseEstimator, ClassifierMixin):
     def predict(self, Xtest):
         rnexpand = sp.random.randint(low=0,high=len(self.y),size=self.n_expand_samples)
         K = GaussKernMini(Xtest.T,self.X[rnexpand,:].T,self.gamma)
-        return sp.sign(K.dot(self.w[rnexpand])) 
+        return sp.sign(K.dot(self.w[rnexpand])).astype("float64") 
 
 
     def transform(self, Xtest): return self.predict(Xtest)
@@ -144,16 +144,15 @@ def run_realdata(reps=2,dname="mushrooms"):
         Xtotal,Ytotal = get_svmlight_file("mushrooms")
         Ytotal = sp.sign(Ytotal - 1.5)
     elif dname == 'madelon':
-        Xtotal,Ytotal = get_svmlight_file("mushrooms")
-        Ytotal = sp.sign(Ytotal - 1.5)
+        Xtotal,Ytotal = get_svmlight_file("madelon")
 
     params = {
             'n_pred_samples': [100],
-            'n_expand_samples': [1000],
+            'n_expand_samples': [200],
             'n_its':[100],
             'eta':[1.],
-            'C':[0.0001],#10.**sp.arange(-8,4,3),
-            'gamma':[.1]#10.**sp.arange(-4.,4.,3)
+            'C':10.**sp.arange(-8,4,2),
+            'gamma':10.**sp.arange(-4.,4.,2)
             }
  
     N = sp.minimum(Xtotal.shape[0],1000)
@@ -173,7 +172,7 @@ def run_realdata(reps=2,dname="mushrooms"):
             Xtest = scaler.transform(Xtest)
 
         print "Training empirical"
-        clf = GridSearchCV(DSEKL(),params,n_jobs=-2,verbose=1,cv=2).fit(Xtrain,Ytrain)
+        clf = GridSearchCV(DSEKL(),params,n_jobs=1,verbose=1,cv=2).fit(Xtrain,Ytrain)
         Eemp.append(sp.mean(clf.best_estimator_.transform(Xtest)!=Ytest))
         clf_batch = GridSearchCV(svm.SVC(),{'C':params['C'],'gamma':params['gamma']},n_jobs=-2,verbose=1,cv=2).fit(Xtrain,Ytrain)
         Ebatch.append(sp.mean(clf_batch.best_estimator_.predict(Xtest)!=Ytest))
