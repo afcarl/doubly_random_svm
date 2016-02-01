@@ -109,7 +109,7 @@ def get_svmlight_file(fn):
 def run_all_realdata(dnames=['sonar','mushroom','skin_nonskin','covertype','diabetes','gisette']):
     [run_realdata(dname=d) for d in dnames]
 
-def run_realdata(reps=2,dname="mushrooms"):
+def run_realdata(reps=10,dname="mushrooms"):
     print "Loading %s"%dname
     if dname == 'covertype':
         dd = fetch_mldata('covtype.binary', data_home=custom_data_home)
@@ -142,11 +142,11 @@ def run_realdata(reps=2,dname="mushrooms"):
 
     params = {
             'n_pred_samples': [100],
-            'n_expand_samples': [1000],
+            'n_expand_samples': [100],
             'n_its':[100],
             'eta':[1.],
-            'C':[0.0001],#10.**sp.arange(-8,4,3),
-            'gamma':[.1]#10.**sp.arange(-4.,4.,3)
+            'C':10.**sp.arange(-8,-2,2),
+            'gamma':10.**sp.arange(-4.,4.,1)
             }
  
     N = sp.minimum(Xtotal.shape[0],1000)
