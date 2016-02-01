@@ -1,4 +1,4 @@
-import pylab as pl
+#import pylab as pl
 import scipy as sp
 from scipy.stats.mstats import zscore
 from numpy.random import multivariate_normal as mvn
@@ -42,6 +42,15 @@ def GaussianKernel(X1, X2, sigma):
     K = sp.exp(-(K ** 2) / (2. * sigma ** 2))
     return K
 
+def svm_predict_raw(Xtrain,Xtest,w,n_expand_samples,sigma=1.,seed=0):
+    # sample Kernel
+    sp.random.seed(seed)
+    rnexpand = sp.random.randint(low=0,high=Xtrain.shape[0],size=n_expand_samples)
+    K = GaussKernMini(Xtest.T,Xtrain[rnexpand,:].T,sigma)
+    # compute predictions
+    return K.dot(w[rnexpand]) 
+    
+
 def svm_gradient(X,y,w,n_pred_samples,n_expand_samples,C=.0001,sigma=1.):
     # sample Kernel
     rnpred = sp.random.randint(low=0,high=len(y),size=n_pred_samples)
@@ -83,23 +92,32 @@ class DSEKL(BaseEstimator, ClassifierMixin):
         dump(y, target_name)
         self.y = load(target_name, mmap_mode='r')
 
-        self.w = sp.float128(sp.randn(len(y)))
+        w = sp.float128(sp.randn(len(y)))
         G = sp.ones(len(y))
         for it in range(self.n_its/workers):
-            gradients = Parallel(n_jobs=4)(delayed(svm_gradient)(self.X, self.y,\
-                 self.w, self.n_pred_samples, self.n_pred_samples, self.C, 1.) for i in range(workers))
+            oldw = w.copy()
+            gradients = Parallel(n_jobs=-1)(delayed(svm_gradient)(self.X, self.y,\
+                w.copy(), self.n_pred_samples, self.n_pred_samples, self.C, 1.) for i in range(workers))
             tmpw = sp.zeros(len(y))
             for g in gradients:
                 G[g[1]] += g[0]**2
                 tmpw[g[1]] += g[0]
             for i in tmpw.nonzero()[0]:
-                self.w[i] -= tmpw[i] / sp.sqrt(G[i])
+                w[i] -= tmpw[i] / sp.sqrt(G[i])
+            #print "Error: %0.2f, change w: %0.2f"%((sp.sign(svm_predict_raw(self.X,X[:100,:],w,self.n_expand_samples,self.gamma,0))==y[:100]).mean(),sp.linalg.norm(oldw-w))
+        self.w = w
         return self
 
-    def predict(self, Xtest):
-        rnexpand = sp.random.randint(low=0,high=len(self.y),size=self.n_expand_samples)
-        K = GaussKernMini(Xtest.T,self.X[rnexpand,:].T,self.gamma)
-        return sp.sign(K.dot(self.w[rnexpand])).astype("float64") 
+
+    def predict(self, Xtest, workers=1):
+        yraw = Parallel(n_jobs=-1)(delayed(svm_predict_raw)(self.X, Xtest,\
+                 self.w, self.n_expand_samples, self.gamma, i) for i in range(workers))
+        #rnexpand = sp.random.randint(low=0,high=len(self.y),size=self.n_expand_samples)
+        #K = GaussKernMini(Xtest.T,self.X[rnexpand,:].T,self.gamma)
+        #return sp.sign(K.dot(self.w[rnexpand])).astype("float64") 
+        yhat = sp.sign(sp.vstack(yraw).mean(axis=0))
+        return yhat
+
 
 
     def transform(self, Xtest): return self.predict(Xtest)
@@ -116,7 +134,7 @@ def get_svmlight_file(fn):
 def run_all_realdata(dnames=['sonar','mushroom','skin_nonskin','covertype','diabetes','gisette']):
     [run_realdata(dname=d) for d in dnames]
 
-def run_realdata(reps=2,dname="mushrooms"):
+def load_realdata(dname="mushrooms"):
     print "Loading %s"%dname
     if dname == 'covertype':
         dd = fetch_mldata('covtype.binary', data_home=custom_data_home)
@@ -145,17 +163,31 @@ def run_realdata(reps=2,dname="mushrooms"):
         Ytotal = sp.sign(Ytotal - 1.5)
     elif dname == 'madelon':
         Xtotal,Ytotal = get_svmlight_file("madelon")
+    return Xtotal,Ytotal
+
+def run_realdata_no_comparison(dname='sonar',N=1000):
+    Xtotal,Ytotal = load_realdata(dname)
+    idx = sp.random.randint(low=0,high=Xtotal.shape[0],size=N)
+    Xtrain = Xtotal[idx[:N/2],:]
+    Ytrain = Ytotal[idx[:N/2]]
+    Xtest = Xtotal[idx[N/2:],:]
+    Ytest = Ytotal[idx[N/2:]]        
+    DS = DSEKL(n_pred_samples=10,n_expand_samples=100,n_its=1000,C=.0001,gamma=10.).fit(Xtrain,Ytrain)
+    print "error: %0.2f"%(Ytest!=DS.predict(Xtest)).mean()
+
+def run_realdata(reps=2,dname='sonar',maxN=1000):
+    Xtotal,Ytotal = load_realdata(dname)
 
     params = {
             'n_pred_samples': [100],
             'n_expand_samples': [200],
             'n_its':[100],
             'eta':[1.],
-            'C':10.**sp.arange(-8,4,2),
-            'gamma':10.**sp.arange(-4.,4.,2)
+            'C':[.001],#10.**sp.arange(-8,4,2),
+            'gamma':[20.]#10.**sp.arange(-4.,4.,2)
             }
  
-    N = sp.minimum(Xtotal.shape[0],1000)
+    N = sp.minimum(Xtotal.shape[0],maxN)
     
     Eemp,Ebatch = [],[]
 
