@@ -4,6 +4,7 @@ from scipy.stats.mstats import zscore
 from numpy.random import multivariate_normal as mvn
 import sklearn
 import pdb
+import sys
 import os
 import urllib
 from scipy.spatial.distance import cdist
@@ -641,6 +642,10 @@ def plot_xor_example():
 
 
 if __name__ == '__main__':
-   plot_xor_example()
-   run_comparison_expand()
+    dname = sys.argv[1]
+    N = int(sys.argv[2])
+    nWorkers = int(sys.argv[3])
+    Xtrain,Ytrain = load_realdata(dname)
+    idx = sp.random.permutation(Xtrain.shape[0])
+    DS = DSEKL(n_pred_samples=100,n_expand_samples=1000,n_its=N,C=1e-8,gamma=900.,workers=nWorkers).fit(Xtrain[idx[:N]],Ytrain[:N])
 
