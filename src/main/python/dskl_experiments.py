@@ -81,7 +81,7 @@ class DSEKL(BaseEstimator, ClassifierMixin):
         self.gamma = gamma
         pass
 
-    def fit(self, X, y, workers=3):
+    def fit(self, X, y, workers=1):
         self.classes_ = sp.unique(y)
         assert(all(self.classes_==[-1.,1.]))        
         folder = tempfile.mkdtemp()
@@ -96,8 +96,8 @@ class DSEKL(BaseEstimator, ClassifierMixin):
         G = sp.ones(len(y))
         for it in range(self.n_its/workers):
             oldw = w.copy()
-            gradients = Parallel(n_jobs=-1)(delayed(svm_gradient)(self.X, self.y,\
-                w.copy(), self.n_pred_samples, self.n_pred_samples, self.C, 1.) for i in range(workers))
+            gradients = Parallel(n_jobs=1)(delayed(svm_gradient)(self.X, self.y,\
+                w.copy(), self.n_pred_samples, self.n_pred_samples, self.C, self.gamma) for i in range(workers))
             tmpw = sp.zeros(len(y))
             for g in gradients:
                 G[g[1]] += g[0]**2
@@ -178,14 +178,20 @@ def run_realdata_no_comparison(dname='sonar',N=1000):
 def run_realdata(reps=2,dname='sonar',maxN=1000):
     Xtotal,Ytotal = load_realdata(dname)
 
-    params = {
+    params_dksl = {
             'n_pred_samples': [100],
-            'n_expand_samples': [200],
-            'n_its':[100],
+            'n_expand_samples': [500],
+            'n_its':[1000],
             'eta':[1.],
-            'C':[.001],#10.**sp.arange(-8,4,2),
-            'gamma':[20.]#10.**sp.arange(-4.,4.,2)
+            'C':[1e-6],#10.**sp.arange(-8,-6,1),
+            'gamma':[10.]#10.**sp.arange(-1.,2.,1)
             }
+    
+    params_batch = {
+            'C':10.**sp.arange(-8,4,2),
+            'gamma':10.**sp.arange(-4.,4.,2)
+            }
+ 
  
     N = sp.minimum(Xtotal.shape[0],maxN)
     
@@ -204,9 +210,9 @@ def run_realdata(reps=2,dname='sonar',maxN=1000):
             Xtest = scaler.transform(Xtest)
 
         print "Training empirical"
-        clf = GridSearchCV(DSEKL(),params,n_jobs=1,verbose=1,cv=2).fit(Xtrain,Ytrain)
+        clf = GridSearchCV(DSEKL(),params_dksl,n_jobs=1,verbose=1,cv=2).fit(Xtrain,Ytrain)
         Eemp.append(sp.mean(clf.best_estimator_.transform(Xtest)!=Ytest))
-        clf_batch = GridSearchCV(svm.SVC(),{'C':params['C'],'gamma':params['gamma']},n_jobs=-2,verbose=1,cv=2).fit(Xtrain,Ytrain)
+        clf_batch = GridSearchCV(svm.SVC(),params_batch,n_jobs=-2,verbose=1,cv=2).fit(Xtrain,Ytrain)
         Ebatch.append(sp.mean(clf_batch.best_estimator_.predict(Xtest)!=Ytest))
         print "Emp: %0.2f - Batch: %0.2f"%(Eemp[-1],Ebatch[-1])
         print clf.best_estimator_.get_params()
