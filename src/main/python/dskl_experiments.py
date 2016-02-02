@@ -98,13 +98,18 @@ class DSEKL(BaseEstimator, ClassifierMixin):
         target_name = os.path.join(folder, 'target')
         dump(y, target_name)
         self.y = load(target_name, mmap_mode='r')
+        w_name = os.path.join(folder, 'weights')
+        #dump(sp.float128(sp.randn(len(y))), w_name)
+        w = np.memmap(w_name, dtype=sp.float128, shape=(len(y)), mode='w+')
+        #w = load(w_name, mmap_mode='w+')
 
-        w = sp.float128(sp.randn(len(y)))
+
+        #w = sp.float128(sp.randn(len(y)))
         G = sp.ones(len(y))
         for it in range(self.n_its/self.workers):
             oldw = w.copy()
-            gradients = Parallel(n_jobs=1)(delayed(svm_gradient)(self.X, self.y,\
-                w.copy(), self.n_pred_samples, self.n_pred_samples, self.C, self.gamma) for i in range(self.workers))
+            gradients = Parallel(n_jobs=-1)(delayed(svm_gradient)(self.X, self.y,\
+                w, self.n_pred_samples, self.n_pred_samples, self.C, self.gamma) for i in range(self.workers))
             tmpw = sp.zeros(len(y))
             for g in gradients:
                 G[g[1]] += g[0]**2
