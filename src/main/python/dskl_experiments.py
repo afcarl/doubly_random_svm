@@ -19,7 +19,7 @@ from sklearn.externals.joblib import Parallel, delayed, dump, load
 import numpy as np
 import shutil
 
-custom_data_home = "/Users/biessman/Data/"
+custom_data_home = "/home/biessman/dskl/"
 
 def GaussKernMini(X1,X2,sigma):
     if sp.sparse.issparse(X1):
@@ -65,23 +65,30 @@ def svm_gradient(X,y,w,n_pred_samples,n_expand_samples,C=.0001,sigma=1.):
     return G,rnexpand
 
 
-global X
-global y
-
 class DSEKL(BaseEstimator, ClassifierMixin):
     """
     Doubly Stochastic Empirical Kernel Learning (for now only with SVM and RBF kernel)
     """
-    def __init__(self,n_expand_samples=100,n_pred_samples=100,n_its=100,eta=1.,C=.001,gamma=1.):
+    def __init__(self,n_expand_samples=100,n_pred_samples=100,n_its=100,eta=1.,C=.001,gamma=1.,workers=1):
         self.n_expand_samples=n_expand_samples
         self.n_pred_samples=n_pred_samples
         self.n_its = n_its
         self.eta = eta
         self.C = C
         self.gamma = gamma
+        self.workers = workers
         pass
 
-    def fit(self, X, y, workers=1):
+    def fit(self, X, y):
+        idx = np.random.permutation(len(y))
+        traintestsplit = len(y)*.2
+        testidx = idx[-traintestsplit:]
+        trainidx = idx[:-traintestsplit]
+        Xtest = X[testidx,:]
+        Ytest = y[testidx]
+        X = X[trainidx,:]
+        y = y[trainidx]
+        print "Training DSEKL on %d samples, testing on %d samples"%(len(trainidx), len(testidx))
         self.classes_ = sp.unique(y)
         assert(all(self.classes_==[-1.,1.]))        
         folder = tempfile.mkdtemp()
@@ -94,27 +101,25 @@ class DSEKL(BaseEstimator, ClassifierMixin):
 
         w = sp.float128(sp.randn(len(y)))
         G = sp.ones(len(y))
-        for it in range(self.n_its/workers):
+        for it in range(self.n_its/self.workers):
             oldw = w.copy()
             gradients = Parallel(n_jobs=1)(delayed(svm_gradient)(self.X, self.y,\
-                w.copy(), self.n_pred_samples, self.n_pred_samples, self.C, self.gamma) for i in range(workers))
+                w.copy(), self.n_pred_samples, self.n_pred_samples, self.C, self.gamma) for i in range(self.workers))
             tmpw = sp.zeros(len(y))
             for g in gradients:
                 G[g[1]] += g[0]**2
                 tmpw[g[1]] += g[0]
             for i in tmpw.nonzero()[0]:
                 w[i] -= tmpw[i] / sp.sqrt(G[i])
-            #print "Error: %0.2f, change w: %0.2f"%((sp.sign(svm_predict_raw(self.X,X[:100,:],w,self.n_expand_samples,self.gamma,0))==y[:100]).mean(),sp.linalg.norm(oldw-w))
+            if it*self.workers % 100 == 0:
+                print "Test-Error: %0.2f, change w: %0.2f"%((sp.sign(svm_predict_raw(self.X,Xtest,w,self.n_expand_samples,self.gamma,0))!=Ytest).mean(),sp.linalg.norm(oldw-w))
         self.w = w
         return self
 
 
-    def predict(self, Xtest, workers=1):
+    def predict(self, Xtest):
         yraw = Parallel(n_jobs=-1)(delayed(svm_predict_raw)(self.X, Xtest,\
-                 self.w, self.n_expand_samples, self.gamma, i) for i in range(workers))
-        #rnexpand = sp.random.randint(low=0,high=len(self.y),size=self.n_expand_samples)
-        #K = GaussKernMini(Xtest.T,self.X[rnexpand,:].T,self.gamma)
-        #return sp.sign(K.dot(self.w[rnexpand])).astype("float64") 
+                 self.w, self.n_expand_samples, self.gamma, i) for i in range(self.workers))
         yhat = sp.sign(sp.vstack(yraw).mean(axis=0))
         return yhat
 
@@ -166,14 +171,9 @@ def load_realdata(dname="mushrooms"):
     return Xtotal,Ytotal
 
 def run_realdata_no_comparison(dname='sonar',N=1000):
-    Xtotal,Ytotal = load_realdata(dname)
-    idx = sp.random.randint(low=0,high=Xtotal.shape[0],size=N)
-    Xtrain = Xtotal[idx[:N/2],:]
-    Ytrain = Ytotal[idx[:N/2]]
-    Xtest = Xtotal[idx[N/2:],:]
-    Ytest = Ytotal[idx[N/2:]]        
-    DS = DSEKL(n_pred_samples=10,n_expand_samples=100,n_its=1000,C=.0001,gamma=10.).fit(Xtrain,Ytrain)
-    print "error: %0.2f"%(Ytest!=DS.predict(Xtest)).mean()
+    Xtrain,Ytrain = load_realdata(dname)
+    idx = sp.random.permutation(Xtrain.shape[0])
+    DS = DSEKL(n_pred_samples=100,n_expand_samples=1000,n_its=N,C=1e-8,gamma=900.,workers=30).fit(Xtrain[idx[:N]],Ytrain[:N])
 
 def run_realdata(reps=2,dname='sonar',maxN=1000):
     Xtotal,Ytotal = load_realdata(dname)
