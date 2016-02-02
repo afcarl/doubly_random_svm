@@ -84,8 +84,8 @@ class DSEKL(BaseEstimator, ClassifierMixin):
         traintestsplit = len(y)*.2
         testidx = idx[-traintestsplit:]
         trainidx = idx[:-traintestsplit]
-        Xtest = X[testidx,:]
-        Ytest = y[testidx]
+        Xtest = X[testidx,:].copy()
+        Ytest = y[testidx].copy()
         X = X[trainidx,:]
         y = y[trainidx]
         print "Training DSEKL on %d samples, testing on %d samples"%(len(trainidx), len(testidx))
@@ -99,12 +99,9 @@ class DSEKL(BaseEstimator, ClassifierMixin):
         dump(y, target_name)
         self.y = load(target_name, mmap_mode='r')
         w_name = os.path.join(folder, 'weights')
-        #dump(sp.float128(sp.randn(len(y))), w_name)
         w = np.memmap(w_name, dtype=sp.float128, shape=(len(y)), mode='w+')
-        #w = load(w_name, mmap_mode='w+')
 
-
-        #w = sp.float128(sp.randn(len(y)))
+        w[:] = sp.float128(sp.randn(len(y)))
         G = sp.ones(len(y))
         for it in range(self.n_its/self.workers):
             oldw = w.copy()
@@ -178,7 +175,7 @@ def load_realdata(dname="mushrooms"):
 def run_realdata_no_comparison(dname='sonar',N=1000):
     Xtrain,Ytrain = load_realdata(dname)
     idx = sp.random.permutation(Xtrain.shape[0])
-    DS = DSEKL(n_pred_samples=100,n_expand_samples=1000,n_its=N,C=1e-8,gamma=900.,workers=30).fit(Xtrain[idx[:N]],Ytrain[:N])
+    DS = DSEKL(n_pred_samples=100,n_expand_samples=1000,n_its=N,C=1e-8,gamma=900.,workers=100).fit(Xtrain[idx[:N]],Ytrain[:N])
 
 def run_realdata(reps=2,dname='sonar',maxN=1000):
     Xtotal,Ytotal = load_realdata(dname)
