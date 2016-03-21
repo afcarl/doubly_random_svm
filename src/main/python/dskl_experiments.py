@@ -13,7 +13,7 @@ from sklearn.datasets import fetch_mldata,make_gaussian_quantiles
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.preprocessing import StandardScaler
 
-custom_data_home = "/Users/biessman/Data/"
+custom_data_home = "/home/nikste/workspace-python/doubly_random_svm/data/"
 
 def GaussKernMini(X1,X2,sigma):
     if sp.sparse.issparse(X1):
@@ -101,6 +101,9 @@ def get_svmlight_file(fn):
     from sklearn.datasets import load_svmlight_file
     url = "https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/binary/"+fn
     fn = os.path.join(custom_data_home,"svmlightdata",fn)
+    if not os.path.exists(fn):
+        print("Path: %s does not exist, creating.."%(fn))
+        os.makedirs(os.path.dirname(fn))
     if not os.path.isfile(fn):
         print("Downloading %s to %s"%(url,fn))
         urllib.urlretrieve(url,fn)
