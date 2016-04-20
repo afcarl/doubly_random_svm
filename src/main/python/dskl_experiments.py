@@ -20,7 +20,10 @@ from sklearn.externals.joblib import Parallel, delayed, dump, load
 import numpy as np
 import shutil
 
-custom_data_home = "/home/biessman/dskl/"
+import matplotlib.pyplot as plt
+
+
+custom_data_home = "/home/nikste/workspace-python/doubly_random_svm_exp/"
 
 def GaussKernMini(X1,X2,sigma):
     if sp.sparse.issparse(X1):
@@ -49,10 +52,15 @@ def svm_predict_raw(Xtrain,Xtest,w,n_expand_samples,sigma=1.,seed=0):
     rnexpand = sp.random.randint(low=0,high=Xtrain.shape[0],size=n_expand_samples)
     K = GaussKernMini(Xtest.T,Xtrain[rnexpand,:].T,sigma)
     # compute predictions
-    return K.dot(w[rnexpand]) 
-    
+    return K.dot(w[rnexpand])
 
-def svm_gradient(X,y,w,n_pred_samples,n_expand_samples,C=.0001,sigma=1.):
+def svm_predict_all(Xtrain,Xtest,w,gamma,sigma=1):
+    K = GaussKernMini(Xtest.T,Xtrain.T,sigma)
+    # compute predictions
+    return K.dot(w)
+
+def svm_gradient(X,y,w,n_pred_samples,n_expand_samples,C=.0001,sigma=1.,seed=1):
+    sp.random.seed(seed)
     # sample Kernel
     rnpred = sp.random.randint(low=0,high=len(y),size=n_pred_samples)
     rnexpand = sp.random.randint(low=0,high=len(y),size=n_expand_samples)
@@ -64,6 +72,35 @@ def svm_gradient(X,y,w,n_pred_samples,n_expand_samples,C=.0001,sigma=1.):
     # compute gradient 
     G = C * w[rnexpand] - (y[rnpred] * inmargin).dot(K)
     return G,rnexpand
+
+def svm_gradient2(X, y, w, n_pred_samples, n_expand_samples, C=.0001, sigma=1.):
+
+    step_size = 1.
+    #sample kernel
+    if n_pred_samples<1: rnpred=range(len(y))
+    else: rnpred = sp.random.randint(low=0,high=len(y),size=n_pred_samples)
+    X_ = X[rnpred,:]
+
+    rnpred = range(X.shape[0])
+    # compute predictions for all test data
+    rnpred = range(X_.shape[0])
+    # get some random indices for expanding the empirical kernel map
+    if n_expand_samples < 1:
+        rnexpand = range(len(y))
+    else:
+        rnexpand = sp.random.randint(low=0, high=len(y), size=n_expand_samples)
+    # compute kernel for random sample
+    K = GaussKernMini(X_.T, X[rnexpand, :].T, sigma)#gamma)
+
+    # compute prediction
+    yhat = K.dot(w[rnexpand])
+    # compute whether or not prediction is in margin
+    inmargin = (yhat * y[rnpred]) <= 1
+    # compute gradient for
+    G = C * w[rnexpand] - (y[rnpred] * inmargin).dot(K)
+    w[rnexpand] -= step_size * G
+    return G.copy(), rnexpand
+
 
 
 class DSEKL(BaseEstimator, ClassifierMixin):
@@ -91,7 +128,7 @@ class DSEKL(BaseEstimator, ClassifierMixin):
         y = y[trainidx]
         print "Training DSEKL on %d samples, testing on %d samples"%(len(trainidx), len(testidx))
         self.classes_ = sp.unique(y)
-        assert(all(self.classes_==[-1.,1.]))        
+        assert(all(self.classes_==[-1.,1.]))
         folder = tempfile.mkdtemp()
         data_name = os.path.join(folder, 'data')
         dump(X, data_name)
@@ -104,18 +141,23 @@ class DSEKL(BaseEstimator, ClassifierMixin):
 
         w[:] = sp.float128(sp.randn(len(y)))
         G = sp.ones(len(y))
+        self.valErrors = []
+        self.trainErrors = []
         for it in range(self.n_its/self.workers):
             oldw = w.copy()
-            gradients = Parallel(n_jobs=-1)(delayed(svm_gradient)(self.X, self.y,\
-                w, self.n_pred_samples, self.n_pred_samples, self.C, self.gamma) for i in range(self.workers))
+            seeds = np.random.randint(0, high=sys.maxint, size=self.workers)
+            gradients = Parallel(n_jobs=-1)(delayed(svm_gradient)(self.X.copy(), self.y.copy(), \
+                                                                       w.copy(), self.n_pred_samples, self.n_expand_samples, C=self.C, sigma=self.gamma, seed=seeds[i]) for i in range(self.workers))
             tmpw = sp.zeros(len(y))
             for g in gradients:
                 G[g[1]] += g[0]**2
                 tmpw[g[1]] += g[0]
             for i in tmpw.nonzero()[0]:
                 w[i] -= tmpw[i] / sp.sqrt(G[i])
-            if it*self.workers % 100 == 0:
-                print "Test-Error: %0.2f, change w: %0.2f"%((sp.sign(svm_predict_raw(self.X,Xtest,w,self.n_expand_samples,self.gamma,0))!=Ytest).mean(),sp.linalg.norm(oldw-w))
+            if it*self.workers % 1 == 0:
+                self.valErrors.append((sp.sign(svm_predict_all(self.X,Xtest,w,self.gamma))!=Ytest).mean())
+                self.trainErrors.append((sp.sign(svm_predict_all(self.X,X,w,self.gamma))!=self.y).mean())
+                print "%i Train-Error: %0.2f Test-Error: %0.2f, change w: %0.2f"%(it,(sp.sign(svm_predict_all(self.X,X,w,self.gamma))!=self.y).mean(),(sp.sign(svm_predict_all(self.X,Xtest,w,self.gamma))!=Ytest).mean(),sp.linalg.norm(oldw-w))
         self.w = w
         return self
 
@@ -151,7 +193,7 @@ def load_realdata(dname="mushrooms"):
     elif dname == 'mnist':
         dd = sklearn.datasets.load_digits(2)
         Xtotal = dd.data
-        Ytotal = sp.sign(dd.target - .5) 
+        Ytotal = sp.sign(dd.target - .5)
     elif dname == 'breast':
         Xtotal,Ytotal = get_svmlight_file("breast-cancer_scale")
         Ytotal = Ytotal - 3 
@@ -642,10 +684,29 @@ def plot_xor_example():
 
 
 if __name__ == '__main__':
-    dname = sys.argv[1]
-    N = int(sys.argv[2])
-    nWorkers = int(sys.argv[3])
-    Xtrain,Ytrain = load_realdata(dname)
-    idx = sp.random.permutation(Xtrain.shape[0])
-    DS = DSEKL(n_pred_samples=100,n_expand_samples=1000,n_its=N,C=1e-8,gamma=900.,workers=nWorkers).fit(Xtrain[idx[:N]],Ytrain[:N])
+    dname = "sonar"#"minist8m" #sys.argv[1]
+    N = 1000 #int(sys.argv[2])
+    nWorkers = 3 #int(sys.argv[3])
+    Xtotal, Ytotal = load_realdata(dname)
+
+    idx = sp.random.randint(low=0, high=Xtotal.shape[0], size=N)
+    Xtrain = Xtotal[idx[:N / 2], :]
+    Ytrain = Ytotal[idx[:N / 2]]
+    Xtest = Xtotal[idx[N / 2:], :]
+    Ytest = Ytotal[idx[N / 2:]]
+    if not sp.sparse.issparse(Xtrain):
+        scaler = StandardScaler()
+        scaler.fit(Xtrain)  # Don't cheat - fit only on training data
+        Xtrain = scaler.transform(Xtrain)
+        Xtest = scaler.transform(Xtest)
+    # idx = sp.random.permutation(Xtrain.shape[0])
+    # DS = DSEKL(n_pred_samples=100,n_expand_samples=100,n_its=N,C=1e-8,gamma=900.,workers=nWorkers).fit(Xtrain[idx[:N]],Ytrain[idx[:N]])
+
+    # working
+    DS = DSEKL(n_pred_samples=100, n_expand_samples=100, n_its=N, C=.001, gamma=1.,workers=nWorkers).fit(Xtrain, Ytrain)
+    # DS = DSEKL(n_pred_samples=100,n_expand_samples=100,n_its=N,C=1e-8,gamma=900.,workers=nWorkers).fit(Xtrain,Ytrain)
+    plt.plot(DS.valErrors)
+    plt.show()
+    plt.plot(DS.trainErrors)
+    plt.show()
 
