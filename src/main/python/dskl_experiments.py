@@ -1,32 +1,45 @@
-import pylab as pl
+#import pylab as pl
 import scipy as sp
+from scipy.sparse import csr_matrix
 from scipy.stats.mstats import zscore
 from numpy.random import multivariate_normal as mvn
+
+import datetime
 import sklearn
 import pdb
+import sys
 import os
 import urllib
 from scipy.spatial.distance import cdist
+
+import time
 from sklearn import svm
 from sklearn.grid_search import GridSearchCV
 from sklearn.datasets import fetch_mldata,make_gaussian_quantiles
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.preprocessing import StandardScaler
+from multiprocessing import Pool
+import tempfile
+from sklearn.externals.joblib.pool import has_shareable_memory
+from sklearn.externals.joblib import Parallel, delayed, dump, load
+import numpy as np
+import shutil
 
-custom_data_home = "/home/nikste/workspace-python/doubly_random_svm/data/"
+import matplotlib.pyplot as plt
 
-def GaussKernMini(X1,X2,sigma):
-    if sp.sparse.issparse(X1):
-        G = sp.outer(X1.multiply(X1).sum(axis=0),sp.ones(X2.shape[1]))
-    else:
-        G = sp.outer((X1 * X1).sum(axis=0),sp.ones(X2.shape[1]))
-    if sp.sparse.issparse(X2):
-        H = sp.outer(X2.multiply(X2).sum(axis=0),sp.ones(X1.shape[1]))
-    else:
-        H = sp.outer((X2 * X2).sum(axis=0),sp.ones(X1.shape[1]))
-    K = sp.exp(-(G + H.T - 2.*(X1.T.dot(X2)))/(2.*sigma**2))
-    if sp.sparse.issparse(X1) | sp.sparse.issparse(X2): K = sp.array(K)
-    return K
+import cPickle
+import pickle
+
+from dsekl import DSEKL
+
+from dataio import load_realdata
+
+from dataio import scale_input
+
+
+mnist8mfn = "/home/nikste/workspace-python/doubly_random_svm/svmlightdata/infimnist/"
+
+
 
 def GaussianKernel(X1, X2, sigma):
     assert(X1.shape[0] == X2.shape[0])
@@ -36,147 +49,106 @@ def GaussianKernel(X1, X2, sigma):
     K = sp.exp(-(K ** 2) / (2. * sigma ** 2))
     return K
 
-class DSEKL(BaseEstimator, ClassifierMixin):
-    """
-    Doubly Stochastic Empirical Kernel Learning (for now only with SVM and RBF kernel)
-    """
-    def __init__(self,n_expand_samples=100,n_pred_samples=100,n_its=100,eta=1.,C=.001,gamma=1.):
-        self.n_expand_samples=n_expand_samples
-        self.n_pred_samples=n_pred_samples
-        self.n_its = n_its
-        self.eta = eta
-        self.C = C
-        self.gamma = gamma
-        pass
-
-    def fit(self, X, y):
-        self.classes_ = sp.unique(y)
-        assert(all(self.classes_==[-1.,1.]))
-        self.X = X
-        self.y = y
-        self.w = sp.float128(sp.randn(len(y)))
-
-        for it in range(1,self.n_its+1):
-            self.take_gradient_step(it)
-
-        return self
-
-    def predict(self, Xtest):
-        K,rnexpand = self.sample_kernel_test(Xtest)
-        return sp.sign(K.dot(self.w[rnexpand]) + 1e-30) 
-
-    def sample_kernel(self):
-        # get some random indices for predictions (the minibatch on which to compute the gradient)
-        if self.n_pred_samples<1: rnpred=range(len(self.y))
-        else: rnpred = sp.random.randint(low=0,high=len(self.y),size=self.n_pred_samples)
-        K,rnexpand = self.sample_kernel_test(self.X[rnpred,:])
-        return K,rnpred,rnexpand
-    
-    def sample_kernel_test(self,Xtest):
-        # compute predictions for all test data
-        rnpred=range(Xtest.shape[0])
-        # get some random indices for expanding the empirical kernel map
-        if self.n_expand_samples<1:rnexpand=range(len(self.y))
-        else: rnexpand = sp.random.randint(low=0,high=len(self.y),size=self.n_expand_samples)
-        # compute kernel for random sample
-        K = GaussKernMini(Xtest.T,self.X[rnexpand,:].T,self.gamma)
-        return K,rnexpand
-
-    def take_gradient_step(self,step_size):
-        
-        # take random sample from kernel matrix
-        K,rnpred,rnexpand = self.sample_kernel()
-        # compute prediction 
-        yhat = K.dot(self.w[rnexpand]) 
-        # compute whether or not prediction is in margin
-        inmargin = (yhat * self.y[rnpred]) <= 1
-        # compute gradient for 
-        G = self.C * self.w[rnexpand] - (self.y[rnpred] * inmargin).dot(K)
-        self.w[rnexpand] -= step_size * G
-        return G
-
-    def transform(self, Xtest): return self.predict(Xtest)
-
-def get_svmlight_file(fn):
-    from sklearn.datasets import load_svmlight_file
-    url = "https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/binary/"+fn
-    fn = os.path.join(custom_data_home,"svmlightdata",fn)
-    if not os.path.exists(fn):
-        print("Path: %s does not exist, creating.."%(fn))
-        os.makedirs(os.path.dirname(fn))
-    if not os.path.isfile(fn):
-        print("Downloading %s to %s"%(url,fn))
-        urllib.urlretrieve(url,fn)
-    return load_svmlight_file(fn)
 
 def run_all_realdata(dnames=['sonar','mushroom','skin_nonskin','covertype','diabetes','gisette']):
     [run_realdata(dname=d) for d in dnames]
 
-def run_realdata(reps=10,dname="mushrooms",nMax=1000):
-    print "Loading %s"%dname
-    if dname == 'covertype':
-        dd = fetch_mldata('covtype.binary', data_home=custom_data_home)
-        Xtotal = dd.data
-        Ytotal = sp.sign(dd.target - 1.5)
-    elif dname == 'mnist':
-        dd = sklearn.datasets.load_digits(2)
-        Xtotal = dd.data
-        Ytotal = sp.sign(dd.target - .5) 
-    elif dname == 'breast':
-        Xtotal,Ytotal = get_svmlight_file("breast-cancer_scale")
-        Ytotal = Ytotal - 3 
-    elif dname == 'diabetes':
-        Xtotal,Ytotal = get_svmlight_file("diabetes_scale")
-    elif dname == 'news':
-        Xtotal,Ytotal = get_svmlight_file("news20.binary.bz2")
-    elif dname == 'gisette':
-        Xtotal,Ytotal = get_svmlight_file("gisette_scale.bz2")
-    elif dname == 'skin_nonskin':
-        Xtotal,Ytotal = get_svmlight_file("skin_nonskin")
-        Ytotal = sp.sign(Ytotal - 1.5)
-    elif dname == 'sonar':
-        Xtotal,Ytotal = get_svmlight_file("sonar_scale")
-    elif dname == 'mushrooms':
-        Xtotal,Ytotal = get_svmlight_file("mushrooms")
-        Ytotal = sp.sign(Ytotal - 1.5)
-    elif dname == 'madelon':
-        Xtotal,Ytotal = get_svmlight_file("mushrooms")
-        Ytotal = sp.sign(Ytotal - 1.5)
 
-    params_dskl = {
-            'n_pred_samples': [100],
-            'n_expand_samples': [100],
+def run_realdata_no_comparison(dname='sonar',n_its=1000,percent_train=0.9,worker=8):
+
+
+    Xtotal,Ytotal = load_realdata(dname)
+
+    # Xtotal = Xtotal[:10000]
+    # Ytotal = Ytotal[:10000]
+    idx = sp.random.permutation(Xtotal.shape[0])
+    n_train = int(Xtotal.shape[0] * percent_train)
+
+    Xtotal = Xtotal[idx]
+    Ytotal = Ytotal[idx]
+
+    Xtest = Xtotal[n_train:]
+    Ytest = Ytotal[n_train:]
+    Xtrain = Xtotal[:n_train]
+    Ytrain = Ytotal[:n_train]
+
+
+    # DS = DSEKL(n_pred_samples=100,n_expand_samples=100,n_its=n_its,C=1e-8,gamma=900.,workers=100).fit(Xtrain[idx[:N]],Ytrain[:N])
+    if not sp.sparse.issparse(Xtrain):
+        scaler = StandardScaler()
+        scaler.fit(Xtrain)  # Don't cheat - fit only on training data
+        Xtrain = scaler.transform(Xtrain)
+        Xtest = scaler.transform(Xtest)
+    else:
+        scaler = StandardScaler(with_mean=False)
+        scaler.fit(Xtrain)
+        Xtrain = scaler.transform(Xtrain)
+        Xtest = scaler.transform(Xtest)
+
+    '''
+    sonar:
+    {'C': 0.0001, 'n_pred_samples': 100, 'workers': 1, 'n_expand_samples': 100, 'eta': 1.0, 'n_its': 1000, 'gamma': 1.0}
+    {'kernel': 'rbf', 'C': 100.0, 'verbose': False, 'probability': False, 'degree': 3, 'shrinking': True, 'max_iter': -1, 'decision_function_shape': None, 'random_state': None, 'tol': 0.001, 'cache_size': 200, 'coef0': 0.0, 'gamma': 0.01, 'class_weight': None}
+    '''
+
+
+
+    '''
+    Emp: 0.51 - Batch: 0.51
+    {'C': 1.0, 'n_pred_samples': 100, 'workers': 1, 'n_expand_samples': 500, 'eta': 1.0, 'n_its': 1000, 'gamma': 100.0}
+    {'kernel': 'rbf', 'C': 100.0, 'verbose': False, 'probability': False, 'degree': 3, 'shrinking': True, 'max_iter': -1, 'decision_function_shape': None, 'random_state': None, 'tol': 0.001, 'cache_size': 200, 'coef0': 0.0, 'gamma': 0.0001, 'class_weight': None}
+    '''
+    # DS = DSEKL(n_pred_samples=1000,n_expand_samples=1000,n_its=n_its,C=1.0,gamma=9.03,workers=worker).fit(Xtrain,Ytrain)
+    DS = DSEKL(n_pred_samples=1000,n_expand_samples=1000,n_its=n_its,C=0.0001,gamma=1.0,workers=worker).fit(Xtrain,Ytrain)
+    print "test result:", sp.mean(DS.transform(Xtest)!=Ytrain)
+
+def run_realdata(reps=2,dname='sonar',maxN=1000):
+    Xtotal,Ytotal = load_realdata(dname)
+
+    params_dksl = {
+            'n_pred_samples': [100,500,1000],
+            'n_expand_samples': [100,500,1000],
             'n_its':[1000],
             'eta':[1.],
-            'C':10.**sp.arange(-8,-2,1),
-            'gamma':10.**sp.arange(-1.,4.,1)
+            'C':10.**sp.arange(-8.,4.,2.),#**sp.arange(-8,-6,1),#[1e-6],#
+            'gamma':10.**sp.arange(-4.,4.,2.)#**sp.arange(-1.,2.,1)#[10.]#
             }
     
     params_batch = {
-            'C':10.**sp.arange(-4,2,1),
-            'gamma':10.**sp.arange(-4.,0.,1)
+            'C':10.**sp.arange(-8.,4.,2.),
+            'gamma':10.**sp.arange(-4.,4.,2.)
             }
  
-    N = sp.minimum(Xtotal.shape[0],nMax)
-    
+ 
+    N = sp.minimum(Xtotal.shape[0],maxN)
+
+    #N = Xtotal.shape[0]
+
     Eemp,Ebatch = [],[]
-    
+
+
+    num_train = int(0.9*N)
     for irep in range(reps):
         idx = sp.random.randint(low=0,high=Xtotal.shape[0],size=N)
-        Xtrain = Xtotal[idx[:N/2],:]
-        Ytrain = Ytotal[idx[:N/2]]
-        Xtest = Xtotal[idx[N/2:],:]
-        Ytest = Ytotal[idx[N/2:]]        
-        if not sp.sparse.issparse(Xtrain): 
+        Xtrain = Xtotal[idx[:num_train],:]
+        Ytrain = Ytotal[idx[:num_train]]
+        Xtest = Xtotal[idx[num_train:],:]
+        Ytest = Ytotal[idx[num_train:]]
+
+        if not sp.sparse.issparse(Xtrain):
             scaler = StandardScaler()
             scaler.fit(Xtrain)  # Don't cheat - fit only on training data
             Xtrain = scaler.transform(Xtrain)
             Xtest = scaler.transform(Xtest)
-
-        print "Training empirical on %d samples, testing on %d samples"%(Xtrain.shape[0],Xtest.shape[0])
-        clf = GridSearchCV(DSEKL(),params_dskl,n_jobs=-2,verbose=1,cv=2).fit(Xtrain,Ytrain)
+        else:
+            scaler = StandardScaler(with_mean=False)
+            scaler.fit(Xtrain)
+            Xtrain = scaler.transform(Xtrain)
+            Xtest = scaler.transform(Xtest)
+        print "Training empirical"
+        clf = GridSearchCV(DSEKL(),params_dksl,n_jobs=100,verbose=1,cv=2).fit(Xtrain,Ytrain)
         Eemp.append(sp.mean(clf.best_estimator_.transform(Xtest)!=Ytest))
-        clf_batch = GridSearchCV(svm.SVC(),params_batch,n_jobs=-2,verbose=1,cv=2).fit(Xtrain,Ytrain)
+        clf_batch = GridSearchCV(svm.SVC(),params_batch,n_jobs=100,verbose=1,cv=2).fit(Xtrain,Ytrain)
         Ebatch.append(sp.mean(clf_batch.best_estimator_.predict(Xtest)!=Ytest))
         print "Emp: %0.2f - Batch: %0.2f"%(Eemp[-1],Ebatch[-1])
         print clf.best_estimator_.get_params()
@@ -185,20 +157,22 @@ def run_realdata(reps=10,dname="mushrooms",nMax=1000):
     print "Data set [%s]: Emp_avg: %0.2f+-%0.2f - Ebatch_avg: %0.2f+-%0.2f"%(dname,sp.array(Eemp).mean(),sp.array(Eemp).std(),sp.array(Ebatch).mean(),sp.array(Ebatch).std())
     print "***************************************************************"
 
-def fit_svm_kernel(X,Y,its=30,eta=1.,C=.1,kernel=(GaussianKernel,(1.)),nPredSamples=10,nExpandSamples=10):
-    D,N = X.shape[0],X.shape[1]
-    X = sp.vstack((sp.ones((1,N)),X))
-    W = sp.randn(len(Y))
-    for it in range(its):
-        print "Iteration %4d Accuracy %0.3f"%(it,sp.mean(Y==sp.sign(kernel[0](X,X,kernel[1]).dot(W))))
-        rnpred = sp.random.randint(low=0,high=N,size=nsamples)
-        rnexpand = sp.random.randint(low=0,high=N,size=nsamples)
-        # compute gradient 
-        G = compute_gradient(Y[rnpred],X[:,rnpred],X[:,rnexpand],W[rnexpand],kernel,C)
-        # update 
-        W[rnexpand] -= eta/(it+1.) * G
-	
-    return W
+# def fit_svm_kernel(X,Y,its=30,eta=1.,C=.1,kernel=(GaussianKernel,(1.)),nPredSamples=10,nExpandSamples=10):
+#     D,N = X.shape[0],X.shape[1]
+#     X = sp.vstack((sp.ones((1,N)),X))
+#     W = sp.randn(len(Y))
+#     for it in range(its):
+#         print "Iteration %4d Accuracy %0.3f"%(it,sp.mean(Y==sp.sign(kernel[0](X,X,kernel[1]).dot(W))))
+#         rnpred = sp.random.randint(low=0,high=N,size=nsamples)
+#         rnexpand = sp.random.randint(low=0,high=N,size=nsamples)
+#         # compute gradient
+#         G = compute_gradient(Y[rnpred],X[:,rnpred],X[:,rnexpand],W[rnexpand],kernel,C)
+#         # update
+#         W[rnexpand] -= eta/(it+1.) * G
+#
+#     return W
+
+
 def run_comparison_pred(N=100,features=2,nPredSamples=[1,20,50],its=100,reps=100):
     noise = 0.2
     C = .1
@@ -602,7 +576,97 @@ def plot_xor_example():
     make_plot_twoclass(X,y,w.T,kernel=(k,(kparam)))
 
 
-if __name__ == '__main__':
-   plot_xor_example()
-   run_comparison_expand()
 
+
+def preprocess_mnist8m():
+    from sklearn.datasets import load_svmlight_file
+    from sklearn.externals import joblib
+    # preprocessing
+    from sklearn.datasets import load_svmlight_file
+    one_two_mnist8m_fn_train = "/home/nikste/workspace-python/doubly_random_svm_exp/svmlightdata/infimnist/" + "mnist8m/" + "mnist8m-libsvm_6_8.txt"   # "mnist8m-libsvm_0_1_small.txt"
+    one_two_mnist8m_fn_test = "/home/nikste/workspace-python/doubly_random_svm_exp/svmlightdata/infimnist/" + "mnist8m/" + "mnist8m-libsvm_6_8-test.txt"  # "mnist8m-libsvm_0_1-test_small.txt"
+
+    if not os.path.isfile(one_two_mnist8m_fn_train):
+        raise ValueError("mnist8m train data not found in:" + one_two_mnist8m_fn_train)
+    if not os.path.isfile(one_two_mnist8m_fn_test):
+        raise ValueError("mnist8m test data not found in:" + one_two_mnist8m_fn_test)
+    print "loading train"
+    t0 = time.time()
+    dd = load_svmlight_file(one_two_mnist8m_fn_train)
+    Xtrain = dd[0]
+    Ytrain = dd[1]
+    Ytrain = sp.sign(Ytrain - .5)
+    print "took:", time.time() - t0
+
+    print "loading test"
+    t0 = time.time()
+    dd = load_svmlight_file(one_two_mnist8m_fn_test)
+    Xtest = dd[0]
+    Ytest = dd[1]
+    Ytest = sp.sign(Ytest - .5)
+    print "took:", time.time() - t0
+
+    Xtrain,Xtest = scale_input(Xtrain, Xtest)
+
+
+    print "saving to file:",datetime.datetime.now()
+    mnist8mfn = "/home/nikste/workspace-python/doubly_random_svm_exp/svmlightdata/infimnist/mnist8m/"
+    # sklearn.datasets.dump_svmlight_file(Xtrain, Ytrain, mnist8mfn + "mnist8m-libsvm_0_1_scaled.txt")
+    # sklearn.datasets.dump_svmlight_file(Xtest, Ytest, mnist8mfn + "mnist8m-libsvm_0_1-test_scaled.txt")
+
+
+    joblib.dump((Xtrain, Ytrain), mnist8mfn  + "mnist8m-libsvm_6_8_scaled.txt.dump", cache_size=200, protocol=2)
+    joblib.dump((Xtest, Ytest), mnist8mfn + "mnist8m-libsvm_6_8_scaled-test.txt.dump" , cache_size=200, protocol=2)
+
+if __name__ == '__main__':
+    # dname = sys.argv[1]
+    # N = int(sys.argv[2])
+    # nWorkers = int(sys.argv[3])
+    # nExpand = int(sys.argv[4])
+    # nits = int(sys.argv[5])
+    # cexp = int(sys.argv[6])
+    # dname = "sonar" #sys.argv[1]
+    # N = 1000 #int(sys.argv[2])
+    # nWorkers = 1 #int(sys.argv[3])
+    # Xtrain,Ytrain = load_realdata(dname)
+    #
+    # Xtrain,Ytrain = load_realdata(dname)
+    # idx = sp.random.permutation(Xtrain.shape[0])
+    # DS = DSEKL(n_pred_samples=nExpand,n_expand_samples=nExpand,n_its=nits,C=10.**cexp,gamma=900.,workers=nWorkers).fit(Xtrain[idx[:N],:],Ytrain[:N])
+
+
+    # run_realdata()
+
+
+    run_realdata(reps=2, dname='covertype', maxN=10000)
+    # run_realdata_no_comparison(dname='covertype',n_its=1000000,worker=1000)
+
+
+
+    # dname = 'mnist8m'  # "sonar"  # sys.argv[1]
+    # N = 1000  # int(sys.argv[2])
+    # nWorkers = 8  # int(sys.argv[3])
+    # # Xtotal, Ytotal = load_realdata(dname)
+    # #
+    # # idx = sp.random.randint(low=0, high=Xtotal.shape[0], size=N)
+    # # Xtrain = Xtotal[idx[:N / 2], :]
+    # # Ytrain = Ytotal[idx[:N / 2]]
+    # # Xtest = Xtotal[idx[N / 2:], :]
+    # # Ytest = Ytotal[idx[N / 2:]]
+    #
+    # # preprocess_mnist8m()
+    # Xtrain, Ytrain, Xtest, Ytest = load_mnist8m()
+    #
+    #
+    # # idx = sp.random.permutation(Xtrain.shape[0])
+    # # DS = DSEKL(n_pred_samples=100,n_expand_samples=100,n_its=N,C=1e-8,gamma=900.,workers=nWorkers).fit(Xtrain[idx[:N]],Ytrain[idx[:N]])
+    #
+    #
+    # # # working
+    # DS = DSEKL(n_pred_samples=1000, n_expand_samples=1000, n_its=N, C=.001, gamma=1.,workers=nWorkers).fit(Xtrain, Ytrain)
+    # # # DS = DSEKL(n_pred_samples=100,n_expand_samples=100,n_its=N,C=1e-8,gamma=900.,workers=nWorkers).fit(Xtrain,Ytrain)
+    # # plt.plot(DS.valErrors)
+    # # plt.show()
+    # # plt.plot(DS.trainErrors)
+    # # plt.show()
+    #
