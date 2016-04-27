@@ -13,7 +13,8 @@ from sklearn.datasets import fetch_mldata
 from sklearn.preprocessing import StandardScaler
 
 
-custom_data_home = "/home/nikste/workspace-python/doubly_random_svm/"
+# custom_data_home = "/home/nikste/workspace-python/doubly_random_svm/"
+custom_data_home = "/home/mkaul/doubly_random_svm/"
 
 
 def scale_input(Xtrain, Xtest):

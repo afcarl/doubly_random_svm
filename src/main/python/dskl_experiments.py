@@ -37,7 +37,8 @@ from dataio import load_realdata
 from dataio import scale_input
 
 
-mnist8mfn = "/home/nikste/workspace-python/doubly_random_svm/svmlightdata/infimnist/"
+# mnist8mfn = "/home/nikste/workspace-python/doubly_random_svm/svmlightdata/infimnist/"
+mnist8mfn = "/home/mkaul/doubly_random_svm/svmlightdata/infimnist/"
 
 
 
@@ -54,18 +55,20 @@ def run_all_realdata(dnames=['sonar','mushroom','skin_nonskin','covertype','diab
     [run_realdata(dname=d) for d in dnames]
 
 
-def run_realdata_no_comparison(dname='sonar',n_its=1000,percent_train=0.9,worker=8):
-
+def run_realdata_no_comparison(dname='sonar', n_its=1000, percent_train=0.9, worker=8, maxN=1000):
 
     Xtotal,Ytotal = load_realdata(dname)
 
-    # Xtotal = Xtotal[:10000]
-    # Ytotal = Ytotal[:10000]
     idx = sp.random.permutation(Xtotal.shape[0])
-    n_train = int(Xtotal.shape[0] * percent_train)
-
     Xtotal = Xtotal[idx]
     Ytotal = Ytotal[idx]
+
+    N = sp.minimum(Xtotal.shape[0], maxN)
+
+    Xtotal = Xtotal[:N]
+    Ytotal = Ytotal[:N]
+    n_train = int(Xtotal.shape[0] * percent_train)
+
 
     Xtest = Xtotal[n_train:]
     Ytest = Ytotal[n_train:]
@@ -74,6 +77,10 @@ def run_realdata_no_comparison(dname='sonar',n_its=1000,percent_train=0.9,worker
 
 
     # DS = DSEKL(n_pred_samples=100,n_expand_samples=100,n_its=n_its,C=1e-8,gamma=900.,workers=100).fit(Xtrain[idx[:N]],Ytrain[:N])
+
+    Xtrain = Xtrain.todense()
+    Xtest = Xtest.todense()
+
     if not sp.sparse.issparse(Xtrain):
         scaler = StandardScaler()
         scaler.fit(Xtrain)  # Don't cheat - fit only on training data
@@ -98,20 +105,28 @@ def run_realdata_no_comparison(dname='sonar',n_its=1000,percent_train=0.9,worker
     {'C': 1.0, 'n_pred_samples': 100, 'workers': 1, 'n_expand_samples': 500, 'eta': 1.0, 'n_its': 1000, 'gamma': 100.0}
     {'kernel': 'rbf', 'C': 100.0, 'verbose': False, 'probability': False, 'degree': 3, 'shrinking': True, 'max_iter': -1, 'decision_function_shape': None, 'random_state': None, 'tol': 0.001, 'cache_size': 200, 'coef0': 0.0, 'gamma': 0.0001, 'class_weight': None}
     '''
+    '''
+    bigger smaple size:
+    {'C': 9.9999999999999995e-07, 'n_pred_samples': 500, 'workers': 1, 'n_expand_samples': 1000, 'eta': 1.0, 'n_its': 1000, 'gamma': 1.0}
+    '''
     # DS = DSEKL(n_pred_samples=1000,n_expand_samples=1000,n_its=n_its,C=1.0,gamma=9.03,workers=worker).fit(Xtrain,Ytrain)
-    DS = DSEKL(n_pred_samples=1000,n_expand_samples=1000,n_its=n_its,C=0.0001,gamma=1.0,workers=worker).fit(Xtrain,Ytrain)
-    print "test result:", sp.mean(DS.transform(Xtest)!=Ytrain)
+    DS = DSEKL(n_pred_samples=1000,n_expand_samples=1000,n_its=n_its,C=1e-08,gamma=1.0,workers=worker).fit(Xtrain,Ytrain)
+    # svm = svm.SVC(n_its=n_its,C=9.9999999999999995e-07,gamma=1.0)
+    print "test result all:", sp.mean(sp.sign(DS.predict_all(Xtest))!=Ytest)
+    print "smart subsample:", sp.mean(sp.sign(DS.predict_support(Xtest))!=Ytest)
+    print "test result subsample:", sp.mean(sp.sign(DS.predict(Xtest))!=Ytest)
 
 def run_realdata(reps=2,dname='sonar',maxN=1000):
     Xtotal,Ytotal = load_realdata(dname)
 
     params_dksl = {
-            'n_pred_samples': [100,500,1000],
-            'n_expand_samples': [100,500,1000],
+            'n_pred_samples': [500,1000],
+            'n_expand_samples': [500,1000],
             'n_its':[1000],
             'eta':[1.],
             'C':10.**sp.arange(-8.,4.,2.),#**sp.arange(-8,-6,1),#[1e-6],#
-            'gamma':10.**sp.arange(-4.,4.,2.)#**sp.arange(-1.,2.,1)#[10.]#
+            'gamma':10.**sp.arange(-4.,4.,2.),#**sp.arange(-1.,2.,1)#[10.]#
+            'workers':[1000]
             }
     
     params_batch = {
@@ -120,7 +135,7 @@ def run_realdata(reps=2,dname='sonar',maxN=1000):
             }
  
  
-    N = sp.minimum(Xtotal.shape[0],maxN)
+    N = Xtotal.shape[0]#sp.minimum(Xtotal.shape[0],maxN)
 
     #N = Xtotal.shape[0]
 
@@ -135,20 +150,20 @@ def run_realdata(reps=2,dname='sonar',maxN=1000):
         Xtest = Xtotal[idx[num_train:],:]
         Ytest = Ytotal[idx[num_train:]]
 
-        if not sp.sparse.issparse(Xtrain):
-            scaler = StandardScaler()
-            scaler.fit(Xtrain)  # Don't cheat - fit only on training data
-            Xtrain = scaler.transform(Xtrain)
-            Xtest = scaler.transform(Xtest)
-        else:
-            scaler = StandardScaler(with_mean=False)
-            scaler.fit(Xtrain)
-            Xtrain = scaler.transform(Xtrain)
-            Xtest = scaler.transform(Xtest)
+        # if not sp.sparse.issparse(Xtrain):
+        #     scaler = StandardScaler()
+        #     scaler.fit(Xtrain)  # Don't cheat - fit only on training data
+        #     Xtrain = scaler.transform(Xtrain)
+        #     Xtest = scaler.transform(Xtest)
+        # else:
+        #     scaler = StandardScaler(with_mean=False)
+        #     scaler.fit(Xtrain)
+        #     Xtrain = scaler.transform(Xtrain)
+        #     Xtest = scaler.transform(Xtest)
         print "Training empirical"
-        clf = GridSearchCV(DSEKL(),params_dksl,n_jobs=100,verbose=1,cv=2).fit(Xtrain,Ytrain)
-        Eemp.append(sp.mean(clf.best_estimator_.transform(Xtest)!=Ytest))
-        clf_batch = GridSearchCV(svm.SVC(),params_batch,n_jobs=100,verbose=1,cv=2).fit(Xtrain,Ytrain)
+        clf = GridSearchCV(DSEKL(),params_dksl,n_jobs=1000,verbose=1,cv=3).fit(Xtrain,Ytrain)
+        Eemp.append(sp.mean(sp.sign(clf.best_estimator_.transform(Xtest))!=Ytest))
+        clf_batch = GridSearchCV(svm.SVC(),params_batch,n_jobs=1000,verbose=1,cv=3).fit(Xtrain,Ytrain)
         Ebatch.append(sp.mean(clf_batch.best_estimator_.predict(Xtest)!=Ytest))
         print "Emp: %0.2f - Batch: %0.2f"%(Eemp[-1],Ebatch[-1])
         print clf.best_estimator_.get_params()
@@ -628,43 +643,10 @@ if __name__ == '__main__':
     # dname = "sonar" #sys.argv[1]
     # N = 1000 #int(sys.argv[2])
     # nWorkers = 1 #int(sys.argv[3])
-    # Xtrain,Ytrain = load_realdata(dname)
-    #
-    # Xtrain,Ytrain = load_realdata(dname)
-    # idx = sp.random.permutation(Xtrain.shape[0])
-    # DS = DSEKL(n_pred_samples=nExpand,n_expand_samples=nExpand,n_its=nits,C=10.**cexp,gamma=900.,workers=nWorkers).fit(Xtrain[idx[:N],:],Ytrain[:N])
 
+    run_realdata(reps=10, dname='covertype', maxN=1000)
+    # run_realdata_no_comparison(dname='covertype',n_its=20000,worker=100,maxN=1000)
 
-    # run_realdata()
-
-
-    run_realdata(reps=2, dname='covertype', maxN=10000)
-    # run_realdata_no_comparison(dname='covertype',n_its=1000000,worker=1000)
-
-
-
-    # dname = 'mnist8m'  # "sonar"  # sys.argv[1]
-    # N = 1000  # int(sys.argv[2])
-    # nWorkers = 8  # int(sys.argv[3])
-    # # Xtotal, Ytotal = load_realdata(dname)
-    # #
-    # # idx = sp.random.randint(low=0, high=Xtotal.shape[0], size=N)
-    # # Xtrain = Xtotal[idx[:N / 2], :]
-    # # Ytrain = Ytotal[idx[:N / 2]]
-    # # Xtest = Xtotal[idx[N / 2:], :]
-    # # Ytest = Ytotal[idx[N / 2:]]
-    #
-    # # preprocess_mnist8m()
-    # Xtrain, Ytrain, Xtest, Ytest = load_mnist8m()
-    #
-    #
-    # # idx = sp.random.permutation(Xtrain.shape[0])
-    # # DS = DSEKL(n_pred_samples=100,n_expand_samples=100,n_its=N,C=1e-8,gamma=900.,workers=nWorkers).fit(Xtrain[idx[:N]],Ytrain[idx[:N]])
-    #
-    #
-    # # # working
-    # DS = DSEKL(n_pred_samples=1000, n_expand_samples=1000, n_its=N, C=.001, gamma=1.,workers=nWorkers).fit(Xtrain, Ytrain)
-    # # # DS = DSEKL(n_pred_samples=100,n_expand_samples=100,n_its=N,C=1e-8,gamma=900.,workers=nWorkers).fit(Xtrain,Ytrain)
     # # plt.plot(DS.valErrors)
     # # plt.show()
     # # plt.plot(DS.trainErrors)

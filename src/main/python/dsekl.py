@@ -10,6 +10,9 @@ from sklearn.base import ClassifierMixin
 from sklearn.externals.joblib import Parallel, delayed, dump, load
 
 def svm_gradient(X,y,w,n_pred_samples,n_expand_samples,C=.0001,sigma=1.,seed=1):
+    if(seed < 0 or seed > 4294967295):
+        # print "caution! seed is:", seed, "setting to 1"
+        seed = sp.random.randint(0, 4294967295)
     sp.random.seed(seed)
     # sample Kernel
     rnpred = sp.random.randint(low=0,high=len(y),size=n_pred_samples)
@@ -40,6 +43,9 @@ def GaussKernMini(X1,X2,sigma):
 
 def svm_predict_raw(Xtrain,Xtest,w,n_expand_samples,sigma=1.,seed=0):
     # sample Kernel
+    if (seed < 0 or seed > 4294967295):
+        # print "caution! seed is:", seed, "setting to 1"
+        seed = sp.randomrandint(0,4294967295)
     sp.random.seed(seed)
     rnexpand = sp.random.randint(low=0,high=Xtrain.shape[0],size=n_expand_samples)
     K = GaussKernMini(Xtest.T,Xtrain[rnexpand,:].T,sigma)
@@ -49,6 +55,9 @@ def svm_predict_raw(Xtrain,Xtest,w,n_expand_samples,sigma=1.,seed=0):
 
 def svm_predict_raw_back(Xtrain,Xtest,w,n_expand_samples,sigma=1.,seed=0):
     # sample Kernel
+    if (seed < 0 or seed > 4294967295):
+        print "caution! seed is:", seed, "setting to 1"
+        seed = 1
     sp.random.seed(seed)
     rnexpand = sp.random.randint(low=0,high=Xtrain.shape[0],size=n_expand_samples)
     K = GaussKernMini(Xtest.T,Xtrain[rnexpand,:].T,sigma)
@@ -91,7 +100,7 @@ class DSEKL(BaseEstimator, ClassifierMixin):
         # X = X[trainidx,:]
         # y = y[trainidx]
 
-        traintestsplit = len(y)*.001
+        traintestsplit = len(y)*.01
         validx = idx[-traintestsplit:]
         trainidx = idx[:-traintestsplit]
         Xval = X[validx,:].copy()
@@ -101,8 +110,8 @@ class DSEKL(BaseEstimator, ClassifierMixin):
 
 
 
-        print "Training DSEKL on %d samples and validating on %d"%(len(idx),traintestsplit)
-        print "using %i workers"%(self.workers)
+        # print "Training DSEKL on %d samples and validating on %d"%(len(idx),traintestsplit)
+        # print "using %i workers"%(self.workers)
 
         self.classes_ = sp.unique(y)
         assert(all(self.classes_==[-1.,1.]))
@@ -122,23 +131,33 @@ class DSEKL(BaseEstimator, ClassifierMixin):
         self.valErrors = []
         self.trainErrors = []
         self.w = w.copy()
-        for it in range(self.n_its/self.workers):
+        oldw = w.copy()
+        it = 0
+        # for it in range(self.n_its/self.workers):
+        delta_w = 5
+        while(it < int(self.n_its / self.workers)):
+            it += 1
 
-            oldw = w.copy()
             # print "iteration %i of %0.2f" % (it, int(self.n_its / self.workers))
             # if it * self.workers % 100 == 0:
-            #     # train_error = (sp.sign(svm_predict_all(self.X, X, w, self.gamma)) != self.y).mean()
-            #     # val_error = (sp.sign(svm_predict_all(self.X, Xval, w, self.gamma)) != Yval).mean()
-            #     train_error = (sp.sign(self.transform(self.X)) != self.y).mean()
-            #     val_error = (sp.sign(self.transform(Xval)) != Yval).mean()
-            #     self.valErrors.append(val_error)
-            #     self.trainErrors.append(train_error)
-            #     print "%i iterations Train-Error: %0.2f Validation-Error: %0.2f, change w: %0.2f" % \
+            #     # # train_error = (sp.sign(svm_predict_all(self.X, X, w, self.gamma)) != self.y).mean()
+            #     # # val_error = (sp.sign(svm_predict_all(self.X, Xval, w, self.gamma)) != Yval).mean()
+            #     # train_error = (sp.sign(self.transform(self.X)) != self.y).mean()
+            #     # val_error = (sp.sign(self.transform(Xval)) != Yval).mean()
+            #     # self.valErrors.append(val_error)
+            #     # self.trainErrors.append(train_error)
+            #     # print "%i iterations Train-Error: %0.2f Validation-Error: %0.2f, change w: %0.2f" % \
+            #     #       (it,
+            #     #        train_error,
+            #     #        val_error,
+            #     #        sp.linalg.norm(oldw - w))
+            #
+            #
+            #     print "%i iterations, change w: %0.2f" % \
             #           (it,
-            #            train_error,
-            #            val_error,
             #            sp.linalg.norm(oldw - w))
 
+            oldw = w.copy()
             seeds = np.random.randint(0, high=sys.maxint, size=self.workers)
             gradients = Parallel(n_jobs=-1)(delayed(svm_gradient)(self.X, self.y, \
                                                                        w.copy(), self.n_pred_samples, self.n_expand_samples, C=self.C, sigma=self.gamma, seed=seeds[i]) for i in range(self.workers))
@@ -150,6 +169,8 @@ class DSEKL(BaseEstimator, ClassifierMixin):
 
             for i in tmpw.nonzero()[0]:
                 w[i] -= tmpw[i] / sp.sqrt(G[i])
+
+            delta_w =  sp.linalg.norm(self.w - w)
 
             self.w = w.copy()
 
@@ -182,7 +203,7 @@ class DSEKL(BaseEstimator, ClassifierMixin):
     def predict(self, Xtest):
         yraw = Parallel(n_jobs=-1)(delayed(svm_predict_raw)(self.X, Xtest, \
                                                             self.w, self.n_expand_samples, self.gamma, i) for i in
-                                   range(1))
+                                   range(self.workers))
 
         yhat = sp.sign(sp.vstack(yraw).mean(axis=0))
         return yhat
@@ -210,16 +231,25 @@ class DSEKL(BaseEstimator, ClassifierMixin):
         # percentile_1 = np.percentile(self.w,10)
         # percentile_2 = np.percentile(self.w,90)
         # idx = np.append(np.where(self.w > percentile_2)[0], np.where(self.w < percentile_1))
-        idx = np.append(np.where(self.w > 1)[0], np.where(self.w < -1))
+
+        print "self.w.shape[0] = ",self.w.shape[0]
+
+        idx = np.append(np.where(self.w > 0.1)[0], np.where(self.w < -0.1))
+
+        print "idx.shape[0]", idx.shape[0]
         # print percentile_1,percentile_2
         # print "found %i support vectors percentile1: %0.2f percentile2: %0.2f" % (idx.shape[0],percentile_1,percentile_2)
-        idx = idx[::500]
+
         # cut off if too many
         if(idx.shape[0] > 400):
-            idx = idx[:400]
+            idx = np.random.permutation(idx)[:400]
         print "found %i support vectors" % (idx.shape[0])
         K = GaussKernMini(Xtest.T, self.X[idx, :].T, self.gamma)
         # compute predictions
         return K.dot(self.w[idx])
 
-    def transform(self, Xtest): return self.predict_support(Xtest)#self.predict_all_subsample(Xtest)#self.predict(Xtest)#svm_predict_all(self.X,Xtest,self.w,self.gamma)#
+    def predict_all(self, Xtest):
+        K = GaussKernMini(Xtest.T, self.X.T, self.gamma)
+        return K.dot(self.w)
+
+    def transform(self, Xtest): return self.predict(Xtest)#self.predict_all_subsample(Xtest)#self.predict(Xtest)#svm_predict_all(self.X,Xtest,self.w,self.gamma)#
