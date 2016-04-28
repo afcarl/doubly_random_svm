@@ -13,8 +13,18 @@ from sklearn.datasets import fetch_mldata
 from sklearn.preprocessing import StandardScaler
 
 
-# custom_data_home = "/home/nikste/workspace-python/doubly_random_svm/"
-custom_data_home = "/home/mkaul/doubly_random_svm/"
+custom_data_home = "/home/nikste/workspace-python/doubly_random_svm/"
+if not os.path.isdir(custom_data_home):
+    custom_data_home = "/home/mkaul/doubly_random_svm/"
+
+mnist8mfn = "/home/nikste/workspace-python/doubly_random_svm/svmlightdata/infimnist/"
+if not os.path.isdir(mnist8mfn):
+    mnist8mfn = "/home/mkaul/doubly_random_svm/svmlightdata/infimnist/"
+
+def load_clf(fname):
+    f = file(fname,"rb")
+    return np.pickle.load(f)
+
 
 
 def scale_input(Xtrain, Xtest):
@@ -184,3 +194,45 @@ def load_mnist8m(binary_classification = True):
         Ytest = dd[1]
         Ytest = sp.sign(Ytest - .5)
         return Xtrain, Ytrain, Xtest, Ytest
+
+
+
+def preprocess_mnist8m():
+    from sklearn.datasets import load_svmlight_file
+    from sklearn.externals import joblib
+    # preprocessing
+    from sklearn.datasets import load_svmlight_file
+    one_two_mnist8m_fn_train = "/home/nikste/workspace-python/doubly_random_svm_exp/svmlightdata/infimnist/" + "mnist8m/" + "mnist8m-libsvm_6_8.txt"   # "mnist8m-libsvm_0_1_small.txt"
+    one_two_mnist8m_fn_test = "/home/nikste/workspace-python/doubly_random_svm_exp/svmlightdata/infimnist/" + "mnist8m/" + "mnist8m-libsvm_6_8-test.txt"  # "mnist8m-libsvm_0_1-test_small.txt"
+
+    if not os.path.isfile(one_two_mnist8m_fn_train):
+        raise ValueError("mnist8m train data not found in:" + one_two_mnist8m_fn_train)
+    if not os.path.isfile(one_two_mnist8m_fn_test):
+        raise ValueError("mnist8m test data not found in:" + one_two_mnist8m_fn_test)
+    print "loading train"
+    t0 = time.time()
+    dd = load_svmlight_file(one_two_mnist8m_fn_train)
+    Xtrain = dd[0]
+    Ytrain = dd[1]
+    Ytrain = sp.sign(Ytrain - .5)
+    print "took:", time.time() - t0
+
+    print "loading test"
+    t0 = time.time()
+    dd = load_svmlight_file(one_two_mnist8m_fn_test)
+    Xtest = dd[0]
+    Ytest = dd[1]
+    Ytest = sp.sign(Ytest - .5)
+    print "took:", time.time() - t0
+
+    Xtrain,Xtest = scale_input(Xtrain, Xtest)
+
+
+    print "saving to file:",datetime.datetime.now()
+    mnist8mfn = "/home/nikste/workspace-python/doubly_random_svm_exp/svmlightdata/infimnist/mnist8m/"
+    # sklearn.datasets.dump_svmlight_file(Xtrain, Ytrain, mnist8mfn + "mnist8m-libsvm_0_1_scaled.txt")
+    # sklearn.datasets.dump_svmlight_file(Xtest, Ytest, mnist8mfn + "mnist8m-libsvm_0_1-test_scaled.txt")
+
+
+    joblib.dump((Xtrain, Ytrain), mnist8mfn  + "mnist8m-libsvm_6_8_scaled.txt.dump", cache_size=200, protocol=2)
+    joblib.dump((Xtest, Ytest), mnist8mfn + "mnist8m-libsvm_6_8_scaled-test.txt.dump" , cache_size=200, protocol=2)
