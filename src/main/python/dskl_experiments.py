@@ -37,8 +37,9 @@ from dataio import load_realdata
 from dataio import scale_input
 
 
-# mnist8mfn = "/home/nikste/workspace-python/doubly_random_svm/svmlightdata/infimnist/"
-mnist8mfn = "/home/mkaul/doubly_random_svm/svmlightdata/infimnist/"
+mnist8mfn = "/home/nikste/workspace-python/doubly_random_svm/svmlightdata/infimnist/"
+if not os.path.isdir(mnist8mfn):
+    mnist8mfn = "/home/mkaul/doubly_random_svm/svmlightdata/infimnist/"
 
 
 
@@ -56,9 +57,10 @@ def run_all_realdata(dnames=['sonar','mushroom','skin_nonskin','covertype','diab
 
 
 def run_realdata_no_comparison(dname='sonar', n_its=1000, percent_train=0.9, worker=8, maxN=1000):
+    print "started loading:", datetime.datetime.now()
+    Xtotal, Ytotal = load_realdata(dname)
 
-    Xtotal,Ytotal = load_realdata(dname)
-
+    print "loading data done!", datetime.datetime.now()
     # decrease dataset size
     N = Xtotal.shape[0]
     if maxN > 0:
@@ -68,30 +70,32 @@ def run_realdata_no_comparison(dname='sonar', n_its=1000, percent_train=0.9, wor
     Ytotal = Ytotal[:N]
 
     # randomize datapoints
+    print "randomization", datetime.datetime.now()
     idx = sp.random.permutation(Xtotal.shape[0])
     Xtotal = Xtotal[idx]
     Ytotal = Ytotal[idx]
 
-
     # divide test and train
     n_train = int(N * percent_train)
-
+    print "dividing in train and test", datetime.datetime.now()
     Xtest = Xtotal[n_train:]
     Ytest = Ytotal[n_train:]
     Xtrain = Xtotal[:n_train]
     Ytrain = Ytotal[:n_train]
 
-
     # DS = DSEKL(n_pred_samples=100,n_expand_samples=100,n_its=n_its,C=1e-8,gamma=900.,workers=100).fit(Xtrain[idx[:N]],Ytrain[:N])
-
+    print "densifying", datetime.datetime.now()
     # unit variance and zero mean
     Xtrain = Xtrain.todense()
     Xtest = Xtest.todense()
 
     if not sp.sparse.issparse(Xtrain):
         scaler = StandardScaler()
+        print "fitting scaler", datetime.datetime.now()
         scaler.fit(Xtrain)  # Don't cheat - fit only on training data
+        print "transforming data train", datetime.datetime.now()
         Xtrain = scaler.transform(Xtrain)
+        print "transforming data test", datetime.datetime.now()
         Xtest = scaler.transform(Xtest)
     else:
         scaler = StandardScaler(with_mean=False)
@@ -151,6 +155,7 @@ def run_realdata(reps=2,dname='sonar',maxN=1000):
 
     num_train = int(0.9*N)
     for irep in range(reps):
+        print "repetition:",irep," of ",reps
         idx = sp.random.randint(low=0,high=Xtotal.shape[0],size=N)
         Xtrain = Xtotal[idx[:num_train],:]
         Ytrain = Ytotal[idx[:num_train]]
