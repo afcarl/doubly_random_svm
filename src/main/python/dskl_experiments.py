@@ -59,16 +59,22 @@ def run_realdata_no_comparison(dname='sonar', n_its=1000, percent_train=0.9, wor
 
     Xtotal,Ytotal = load_realdata(dname)
 
+    # decrease dataset size
+    N = Xtotal.shape[0]
+    if maxN > 0:
+        N = sp.minimum(Xtotal.shape[0], maxN)
+
+    Xtotal = Xtotal[:N]
+    Ytotal = Ytotal[:N]
+
+    # randomize datapoints
     idx = sp.random.permutation(Xtotal.shape[0])
     Xtotal = Xtotal[idx]
     Ytotal = Ytotal[idx]
 
-    N = sp.minimum(Xtotal.shape[0], maxN)
 
-    Xtotal = Xtotal[:N]
-    Ytotal = Ytotal[:N]
-    n_train = int(Xtotal.shape[0] * percent_train)
-
+    # divide test and train
+    n_train = int(N * percent_train)
 
     Xtest = Xtotal[n_train:]
     Ytest = Ytotal[n_train:]
@@ -78,6 +84,7 @@ def run_realdata_no_comparison(dname='sonar', n_its=1000, percent_train=0.9, wor
 
     # DS = DSEKL(n_pred_samples=100,n_expand_samples=100,n_its=n_its,C=1e-8,gamma=900.,workers=100).fit(Xtrain[idx[:N]],Ytrain[:N])
 
+    # unit variance and zero mean
     Xtrain = Xtrain.todense()
     Xtest = Xtest.todense()
 
@@ -150,16 +157,18 @@ def run_realdata(reps=2,dname='sonar',maxN=1000):
         Xtest = Xtotal[idx[num_train:],:]
         Ytest = Ytotal[idx[num_train:]]
 
-        # if not sp.sparse.issparse(Xtrain):
-        #     scaler = StandardScaler()
-        #     scaler.fit(Xtrain)  # Don't cheat - fit only on training data
-        #     Xtrain = scaler.transform(Xtrain)
-        #     Xtest = scaler.transform(Xtest)
-        # else:
-        #     scaler = StandardScaler(with_mean=False)
-        #     scaler.fit(Xtrain)
-        #     Xtrain = scaler.transform(Xtrain)
-        #     Xtest = scaler.transform(Xtest)
+        Xtrain = Xtrain.todense()
+        Xtest = Xtest.todense()
+        if not sp.sparse.issparse(Xtrain):
+            scaler = StandardScaler()
+            scaler.fit(Xtrain)  # Don't cheat - fit only on training data
+            Xtrain = scaler.transform(Xtrain)
+            Xtest = scaler.transform(Xtest)
+        else:
+            scaler = StandardScaler(with_mean=False)
+            scaler.fit(Xtrain)
+            Xtrain = scaler.transform(Xtrain)
+            Xtest = scaler.transform(Xtest)
         print "Training empirical"
         clf = GridSearchCV(DSEKL(),params_dksl,n_jobs=1000,verbose=1,cv=3).fit(Xtrain,Ytrain)
         Eemp.append(sp.mean(sp.sign(clf.best_estimator_.transform(Xtest))!=Ytest))
@@ -644,8 +653,8 @@ if __name__ == '__main__':
     # N = 1000 #int(sys.argv[2])
     # nWorkers = 1 #int(sys.argv[3])
 
-    run_realdata(reps=10, dname='covertype', maxN=1000)
-    # run_realdata_no_comparison(dname='covertype',n_its=20000,worker=100,maxN=1000)
+    # run_realdata(reps=10, dname='covertype', maxN=1000)
+    run_realdata_no_comparison(dname='covertype',n_its=20000,worker=100,maxN=-1)
 
     # # plt.plot(DS.valErrors)
     # # plt.show()
