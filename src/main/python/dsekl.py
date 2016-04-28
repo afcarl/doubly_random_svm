@@ -5,6 +5,7 @@ import numpy as np
 import scipy as sp
 from numpy import load
 
+import datetime
 from sklearn.base import BaseEstimator
 from sklearn.base import ClassifierMixin
 from sklearn.externals.joblib import Parallel, delayed, dump, load
@@ -80,7 +81,7 @@ class DSEKL(BaseEstimator, ClassifierMixin):
     """
     Doubly Stochastic Empirical Kernel Learning (for now only with SVM and RBF kernel)
     """
-    def __init__(self,n_expand_samples=100,n_pred_samples=100,n_its=100,eta=1.,C=.001,gamma=1.,workers=1):
+    def __init__(self,n_expand_samples=100,n_pred_samples=100,n_its=100,eta=1.,C=.001,gamma=1.,workers=1,validation=False,verbose=False):
         self.n_expand_samples=n_expand_samples
         self.n_pred_samples=n_pred_samples
         self.n_its = n_its
@@ -88,47 +89,51 @@ class DSEKL(BaseEstimator, ClassifierMixin):
         self.C = C
         self.gamma = gamma
         self.workers = workers
+        self.verbose = verbose
+        self.validation = validation
         pass
 
     def fit(self, X, y):
         idx = np.random.permutation(len(y))
-        # traintestsplit = len(y)*.2
-        # testidx = idx[-traintestsplit:]
-        # trainidx = idx[:-traintestsplit]
-        # Xtest = X[testidx,:].copy()
-        # Ytest = y[testidx].copy()
-        # X = X[trainidx,:]
-        # y = y[trainidx]
 
-        traintestsplit = len(y)*.01
-        validx = idx[-traintestsplit:]
-        trainidx = idx[:-traintestsplit]
-        Xval = X[validx,:].copy()
-        Yval = y[validx].copy()
-        X = X[trainidx,:]
-        y = y[trainidx]
+        if self.validation:
+            traintestsplit = len(y)*.01
+            validx = idx[-traintestsplit:]
+            trainidx = idx[:-traintestsplit]
+            Xval = X[validx,:].copy()
+            Yval = y[validx].copy()
+            X = X[trainidx,:]
+            y = y[trainidx]
 
+        self.X = X
+        self.y = y
 
-
-        # print "Training DSEKL on %d samples and validating on %d"%(len(idx),traintestsplit)
-        # print "using %i workers"%(self.workers)
+        if self.verbose:
+            if self.validation:
+                print "Training DSEKL on %d samples and validating on %d"%(len(idx),traintestsplit)
+            else:
+                print "Training DSEKL on %d samples" % (len(idx))
+            print "using %i workers"%(self.workers)
 
         self.classes_ = sp.unique(y)
         assert(all(self.classes_==[-1.,1.]))
 
-        folder = tempfile.mkdtemp()
-        data_name = os.path.join(folder, 'data')
-        dump(X, data_name)
-        self.X = load(data_name, mmap_mode='r')
-        target_name = os.path.join(folder, 'target')
-        dump(y, target_name)
-        self.y = load(target_name, mmap_mode='r')
-        w_name = os.path.join(folder, 'weights')
-        w = np.memmap(w_name, dtype=sp.float128, shape=(len(y)), mode='w+')
+        # folder = tempfile.mkdtemp()
+        # data_name = os.path.join(folder, 'data')
+        # dump(X, data_name)
+        # self.X = load(data_name, mmap_mode='r')
+        # target_name = os.path.join(folder, 'target')
+        # dump(y, target_name)
+        # self.y = load(target_name, mmap_mode='r')
+        # w_name = os.path.join(folder, 'weights')
+        # w = np.memmap(w_name, dtype=sp.float128, shape=(len(y)), mode='w+')
 
-        w[:] = sp.float128(sp.randn(len(y)))
+        # w[:] = sp.float128(sp.randn(len(y)))
+        w = sp.float128(sp.randn(len(y)))
         G = sp.ones(len(y))
-        self.valErrors = []
+        if self.validation:
+            self.valErrors = []
+
         self.trainErrors = []
         self.w = w.copy()
         oldw = w.copy()
@@ -138,24 +143,27 @@ class DSEKL(BaseEstimator, ClassifierMixin):
         while(it < int(self.n_its / self.workers)):
             it += 1
 
-            # print "iteration %i of %0.2f" % (it, int(self.n_its / self.workers))
-            # if it * self.workers % 100 == 0:
-            #     # # train_error = (sp.sign(svm_predict_all(self.X, X, w, self.gamma)) != self.y).mean()
-            #     # # val_error = (sp.sign(svm_predict_all(self.X, Xval, w, self.gamma)) != Yval).mean()
-            #     # train_error = (sp.sign(self.transform(self.X)) != self.y).mean()
-            #     # val_error = (sp.sign(self.transform(Xval)) != Yval).mean()
-            #     # self.valErrors.append(val_error)
-            #     # self.trainErrors.append(train_error)
-            #     # print "%i iterations Train-Error: %0.2f Validation-Error: %0.2f, change w: %0.2f" % \
-            #     #       (it,
-            #     #        train_error,
-            #     #        val_error,
-            #     #        sp.linalg.norm(oldw - w))
-            #
-            #
-            #     print "%i iterations, change w: %0.2f" % \
-            #           (it,
-            #            sp.linalg.norm(oldw - w))
+            if self.verbose:
+                print "iteration %i of %0.2f" % (it, int(self.n_its / self.workers))
+                if it * self.workers % 1 == 0:
+                    # # train_error = (sp.sign(svm_predict_all(self.X, X, w, self.gamma)) != self.y).mean()
+                    # # val_error = (sp.sign(svm_predict_all(self.X, Xval, w, self.gamma)) != Yval).mean()
+                    # train_error = (sp.sign(self.transform(self.X)) != self.y).mean()
+                    if self.validation:
+                        val_error = (sp.sign(self.predict(Xval)) != Yval).mean()
+                        self.valErrors.append(val_error)
+                        print "Validation-Error: %0.2f"%(val_error)
+                    # self.trainErrors.append(train_error)
+                    # print "%i iterations Train-Error: %0.2f Validation-Error: %0.2f, change w: %0.2f" % \
+                    #       (it,
+                    #        train_error,
+                    #        val_error,
+                    #        sp.linalg.norm(oldw - w))
+
+                    print datetime.datetime.now()
+                    print "%i iterations, change w: %0.2f" % \
+                          (it,
+                           sp.linalg.norm(oldw - w))
 
             oldw = w.copy()
             seeds = np.random.randint(0, high=sys.maxint, size=self.workers)
@@ -170,40 +178,18 @@ class DSEKL(BaseEstimator, ClassifierMixin):
             for i in tmpw.nonzero()[0]:
                 w[i] -= tmpw[i] / sp.sqrt(G[i])
 
-            delta_w =  sp.linalg.norm(self.w - w)
-
             self.w = w.copy()
-
-
-                # print "%i Train-Error: %0.2f, change w: %0.2f" % \
-                #             (it,
-                #             val_error,
-                #             sp.linalg.norm(oldw-w))
-
-
-
-            # if it*self.workers % 1 == 0:
-            # if it % 10 == 0:
-            #     train_error = (sp.sign(svm_predict_all(self.X,X,w,self.gamma))!=self.y).mean()
-            #     val_error = (sp.sign(svm_predict_all(self.X,Xtest,w,self.gamma))!=Ytest).mean()
-            #     # train_error = (sp.sign(svm_predict_raw(self.X,X,w,self.n_expand_samples,sigma=self.gamma))!=self.y).mean()
-            #     # val_error = (sp.sign(svm_predict_raw(self.X,Xtest,w,self.n_expand_samples,sigma=self.gamma))!=Ytest).mean()
-            #     self.valErrors.append(val_error)
-            #     self.trainErrors.append(train_error)
-            #     print "%i Train-Error: %0.2f Test-Error: %0.2f, change w: %0.2f"%\
-            #           (it,
-            #            train_error,
-            #            val_error,
-            #            sp.linalg.norm(oldw-w))
 
         self.w = w.copy()
         return self
 
 
     def predict(self, Xtest):
+        number_of_redraws = self.workers
+
         yraw = Parallel(n_jobs=-1)(delayed(svm_predict_raw)(self.X, Xtest, \
                                                             self.w, self.n_expand_samples, self.gamma, i) for i in
-                                   range(self.workers))
+                                   range(number_of_redraws))
 
         yhat = sp.sign(sp.vstack(yraw).mean(axis=0))
         return yhat

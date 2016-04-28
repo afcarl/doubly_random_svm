@@ -18,6 +18,12 @@ if not os.path.isdir(custom_data_home):
     custom_data_home = "/home/mkaul/doubly_random_svm/"
 
 
+def load_clf(fname):
+    f = file(fname,"rb")
+    return np.pickle.load(f)
+
+
+
 def scale_input(Xtrain, Xtest):
     print "scaling"
     print "current time:", datetime.datetime.now()

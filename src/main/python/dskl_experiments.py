@@ -32,7 +32,7 @@ import pickle
 
 from dsekl import DSEKL
 
-from dataio import load_realdata
+from dataio import load_realdata, custom_data_home
 
 from dataio import scale_input
 
@@ -120,12 +120,76 @@ def run_realdata_no_comparison(dname='sonar', n_its=1000, percent_train=0.9, wor
     bigger smaple size:
     {'C': 9.9999999999999995e-07, 'n_pred_samples': 500, 'workers': 1, 'n_expand_samples': 1000, 'eta': 1.0, 'n_its': 1000, 'gamma': 1.0}
     '''
-    # DS = DSEKL(n_pred_samples=1000,n_expand_samples=1000,n_its=n_its,C=1.0,gamma=9.03,workers=worker).fit(Xtrain,Ytrain)
-    DS = DSEKL(n_pred_samples=1000,n_expand_samples=1000,n_its=n_its,C=1e-08,gamma=1.0,workers=worker).fit(Xtrain,Ytrain)
+    print "starting training process",datetime.datetime.now()
+    # max: n_pred_samples=15000,n_expand_samples=15000
+    worker = 48
+    DS = DSEKL(n_pred_samples=15000,n_expand_samples=15000,n_its=n_its,C=1e-08,gamma=1.0,workers=worker,validation=True,verbose=True).fit(Xtrain,Ytrain)
     # svm = svm.SVC(n_its=n_its,C=9.9999999999999995e-07,gamma=1.0)
-    print "test result all:", sp.mean(sp.sign(DS.predict_all(Xtest))!=Ytest)
-    print "smart subsample:", sp.mean(sp.sign(DS.predict_support(Xtest))!=Ytest)
+    # print "test result all:", sp.mean(sp.sign(DS.predict_all(Xtest))!=Ytest)
+    # print "smart subsample:", sp.mean(sp.sign(DS.predict_support(Xtest))!=Ytest)
     print "test result subsample:", sp.mean(sp.sign(DS.predict(Xtest))!=Ytest)
+
+
+def hyperparameter_search_dskl(reps=2,dname='sonar',maxN=1000,percent_test=0.9):
+    Xtotal, Ytotal = load_realdata(dname)
+
+    if maxN > 0:
+        N = sp.minimum(Xtotal.shape[0], maxN)
+    else:
+        N = Xtotal.shape[0]
+
+    num_train = int(percent_test * N)
+
+    params_dksl = {
+        'n_pred_samples': [500],
+        'n_expand_samples': [500],
+        'n_its': [1000],
+        'eta': [1.],
+        'C': [10.], #** sp.arange(-8., 4., 5.),  # **sp.arange(-8,-6,1),#[1e-6],#
+        'gamma': [10.], #** sp.arange(-4., 4., 5.),  # **sp.arange(-1.,2.,1)#[10.]#
+        'workers': [10]
+    }
+
+    Eemp = []
+
+    for irep in range(reps):
+        print "repetition:",irep," of ",reps
+        idx = sp.random.randint(low=0,high=Xtotal.shape[0],size=N)
+        Xtrain = Xtotal[idx[:num_train],:]
+        Ytrain = Ytotal[idx[:num_train]]
+        Xtest = Xtotal[idx[num_train:],:]
+        Ytest = Ytotal[idx[num_train:]]
+
+        Xtrain = Xtrain.todense()
+        Xtest = Xtest.todense()
+        if not sp.sparse.issparse(Xtrain):
+            scaler = StandardScaler()
+            scaler.fit(Xtrain)  # Don't cheat - fit only on training data
+            Xtrain = scaler.transform(Xtrain)
+            Xtest = scaler.transform(Xtest)
+        else:
+            scaler = StandardScaler(with_mean=False)
+            scaler.fit(Xtrain)
+            Xtrain = scaler.transform(Xtrain)
+            Xtest = scaler.transform(Xtest)
+        print "Training empirical"
+        clf = GridSearchCV(DSEKL(),params_dksl,n_jobs=10,verbose=1,cv=3).fit(Xtrain,Ytrain)
+        Eemp.append(sp.mean(sp.sign(clf.best_estimator_.transform(Xtest))!=Ytest))
+        #clf_batch = GridSearchCV(svm.SVC(),params_batch,n_jobs=1000,verbose=1,cv=3).fit(Xtrain,Ytrain)
+        #Ebatch.append(sp.mean(clf_batch.best_estimator_.predict(Xtest)!=Ytest))
+        #print "Emp: %0.2f - Batch: %0.2f"%(Eemp[-1],Ebatch[-1])
+        print "Emp: %0.2f"%(Eemp[-1])
+        print clf.best_estimator_.get_params()
+        fname = custom_data_home + "clf_" + dname + "_nt" + str(num_train) + "_reps" + str(irep)
+        f = open(fname,'wb')
+        print "saving to file:", fname
+        pickle.dump(clf, f, pickle.HIGHEST_PROTOCOL)
+        #print clf_batch.best_estimator_.get_params()
+    print "***************************************************************"
+    # print "Data set [%s]: Emp_avg: %0.2f+-%0.2f - Ebatch_avg: %0.2f+-%0.2f"%(dname,sp.array(Eemp).mean(),sp.array(Eemp).std(),sp.array(Ebatch).mean(),sp.array(Ebatch).std())
+    print "Data set [%s]: Emp_avg: %0.2f+-%0.2f"%(dname,sp.array(Eemp).mean(),sp.array(Eemp).std())
+    print "***************************************************************"
+
 
 def run_realdata(reps=2,dname='sonar',maxN=1000):
     Xtotal,Ytotal = load_realdata(dname)
@@ -145,8 +209,10 @@ def run_realdata(reps=2,dname='sonar',maxN=1000):
             'gamma':10.**sp.arange(-4.,4.,2.)
             }
  
- 
-    N = Xtotal.shape[0]#sp.minimum(Xtotal.shape[0],maxN)
+    if maxN > 0:
+        N = sp.minimum(Xtotal.shape[0],maxN)
+    else:
+        N = Xtotal.shape[0]
 
     #N = Xtotal.shape[0]
 
@@ -175,15 +241,17 @@ def run_realdata(reps=2,dname='sonar',maxN=1000):
             Xtrain = scaler.transform(Xtrain)
             Xtest = scaler.transform(Xtest)
         print "Training empirical"
-        clf = GridSearchCV(DSEKL(),params_dksl,n_jobs=1000,verbose=1,cv=3).fit(Xtrain,Ytrain)
+        clf = GridSearchCV(DSEKL(),params_dksl,n_jobs=10,verbose=1,cv=3).fit(Xtrain,Ytrain)
         Eemp.append(sp.mean(sp.sign(clf.best_estimator_.transform(Xtest))!=Ytest))
-        clf_batch = GridSearchCV(svm.SVC(),params_batch,n_jobs=1000,verbose=1,cv=3).fit(Xtrain,Ytrain)
-        Ebatch.append(sp.mean(clf_batch.best_estimator_.predict(Xtest)!=Ytest))
-        print "Emp: %0.2f - Batch: %0.2f"%(Eemp[-1],Ebatch[-1])
+        #clf_batch = GridSearchCV(svm.SVC(),params_batch,n_jobs=1000,verbose=1,cv=3).fit(Xtrain,Ytrain)
+        #Ebatch.append(sp.mean(clf_batch.best_estimator_.predict(Xtest)!=Ytest))
+        #print "Emp: %0.2f - Batch: %0.2f"%(Eemp[-1],Ebatch[-1])
+        print "Emp: %0.2f"%(Eemp[-1])
         print clf.best_estimator_.get_params()
-        print clf_batch.best_estimator_.get_params()
+        #print clf_batch.best_estimator_.get_params()
     print "***************************************************************"
-    print "Data set [%s]: Emp_avg: %0.2f+-%0.2f - Ebatch_avg: %0.2f+-%0.2f"%(dname,sp.array(Eemp).mean(),sp.array(Eemp).std(),sp.array(Ebatch).mean(),sp.array(Ebatch).std())
+    # print "Data set [%s]: Emp_avg: %0.2f+-%0.2f - Ebatch_avg: %0.2f+-%0.2f"%(dname,sp.array(Eemp).mean(),sp.array(Eemp).std(),sp.array(Ebatch).mean(),sp.array(Ebatch).std())
+    print "Data set [%s]: Emp_avg: %0.2f+-%0.2f"%(dname,sp.array(Eemp).mean(),sp.array(Eemp).std())
     print "***************************************************************"
 
 # def fit_svm_kernel(X,Y,its=30,eta=1.,C=.1,kernel=(GaussianKernel,(1.)),nPredSamples=10,nExpandSamples=10):
@@ -658,8 +726,10 @@ if __name__ == '__main__':
     # N = 1000 #int(sys.argv[2])
     # nWorkers = 1 #int(sys.argv[3])
 
-    # run_realdata(reps=10, dname='covertype', maxN=1000)
-    run_realdata_no_comparison(dname='covertype',n_its=20000,worker=100,maxN=-1)
+    # run_realdata(reps=10, dname='covertype', maxN=2000)
+    # hyperparameter_search_dskl(reps=2,dname="covertype",maxN=1000)
+    run_realdata_no_comparison(dname='covertype',n_its=20000,worker=1,maxN=-1)
+
 
     # # plt.plot(DS.valErrors)
     # # plt.show()
