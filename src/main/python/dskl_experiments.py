@@ -137,7 +137,7 @@ def run_realdata(reps=2,dname='sonar',maxN=1000):
             'eta':[1.],
             'C':10.**sp.arange(-8.,4.,2.),#**sp.arange(-8,-6,1),#[1e-6],#
             'gamma':10.**sp.arange(-4.,4.,2.),#**sp.arange(-1.,2.,1)#[10.]#
-            'workers':[1000]
+            'workers':[500,1000]
             }
     
     params_batch = {
