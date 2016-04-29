@@ -79,10 +79,13 @@ def run_realdata_no_comparison(dname='sonar', n_its=1000, percent_train=0.9, wor
     bigger smaple size:
     {'C': 9.9999999999999995e-07, 'n_pred_samples': 500, 'workers': 1, 'n_expand_samples': 1000, 'eta': 1.0, 'n_its': 1000, 'gamma': 1.0}
     '''
+
+    '''
+    {'C': 0.0001, 'verbose': False, 'n_pred_samples': 50.0, 'damp': True, 'n_expand_samples': 75.0, 'eta': 1.0, 'n_its': 10000, 'validation': False, 'workers': 48, 'gamma': 1.0}
+    '''
     print "starting training process",datetime.datetime.now()
     # max: n_pred_samples=15000,n_expand_samples=15000
-    worker = 48
-    DS = DSEKL(n_pred_samples=15000,n_expand_samples=15000,n_its=n_its,C=1e-08,gamma=1.0,workers=worker,validation=True,verbose=True).fit(Xtrain,Ytrain)
+    DS = DSEKL(n_pred_samples=15000,n_expand_samples=15000,n_its=n_its,C=0.0001,gamma=1.0,workers=worker,validation=True,verbose=True).fit(Xtrain,Ytrain)
     # svm = svm.SVC(n_its=n_its,C=9.9999999999999995e-07,gamma=1.0)
     # print "test result all:", sp.mean(sp.sign(DS.predict_all(Xtest))!=Ytest)
     # print "smart subsample:", sp.mean(sp.sign(DS.predict_support(Xtest))!=Ytest)
@@ -212,6 +215,6 @@ def run_realdata(reps=2,dname='sonar',maxN=1000):
 if __name__ == '__main__':
 
     # run_realdata(reps=10, dname='covertype', maxN=2000)
-    hyperparameter_search_dskl(reps=2,dname="covertype",maxN=10000)
-    # run_realdata_no_comparison(dname='covertype',n_its=20000,worker=1,maxN=15000)
+    # hyperparameter_search_dskl(reps=2,dname="covertype",maxN=10000)
+    run_realdata_no_comparison(dname='covertype',n_its=20000,worker=48,maxN=-1)
 
