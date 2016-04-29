@@ -1,10 +1,10 @@
 import datetime
-import os
 import pickle
 
 import scipy as sp
 from scipy.sparse import csr_matrix
 
+from sklearn import svm
 from sklearn.grid_search import GridSearchCV
 from sklearn.preprocessing import StandardScaler
 
@@ -45,7 +45,6 @@ def run_realdata_no_comparison(dname='sonar', n_its=1000, percent_train=0.9, wor
     Xtrain = Xtotal[:n_train]
     Ytrain = Ytotal[:n_train]
 
-    # DS = DSEKL(n_pred_samples=100,n_expand_samples=100,n_its=n_its,C=1e-8,gamma=900.,workers=100).fit(Xtrain[idx[:N]],Ytrain[:N])
     print "densifying", datetime.datetime.now()
     # unit variance and zero mean
     Xtrain = Xtrain.todense()
@@ -70,8 +69,6 @@ def run_realdata_no_comparison(dname='sonar', n_its=1000, percent_train=0.9, wor
     {'C': 0.0001, 'n_pred_samples': 100, 'workers': 1, 'n_expand_samples': 100, 'eta': 1.0, 'n_its': 1000, 'gamma': 1.0}
     {'kernel': 'rbf', 'C': 100.0, 'verbose': False, 'probability': False, 'degree': 3, 'shrinking': True, 'max_iter': -1, 'decision_function_shape': None, 'random_state': None, 'tol': 0.001, 'cache_size': 200, 'coef0': 0.0, 'gamma': 0.01, 'class_weight': None}
     '''
-
-
 
     '''
     Emp: 0.51 - Batch: 0.51
@@ -104,9 +101,9 @@ def hyperparameter_search_dskl(reps=2,dname='sonar',maxN=1000,num_test=10000):
         'n_pred_samples': [N/2*0.01,N/2*0.02,N/2*0.03],
         'n_expand_samples': [N/2*0.01,N/2*0.02,N/2*0.03],
         'n_its': [10000],
-        'eta': [1.],#[0.99999],
-        'C': 10.  **sp.arange(-8.,4.,2.),#[1e-6],#
-        'gamma': 10. **sp.arange(-4.,4.,2.),#[10.]#
+        'eta': [1.],
+        'C': 10.  **sp.arange(-8.,4.,2.),
+        'gamma': 10. **sp.arange(-4.,4.,2.),
         'workers': [48],
         #'validation': [False],
         #'damp:': [True,False]#,
@@ -141,18 +138,13 @@ def hyperparameter_search_dskl(reps=2,dname='sonar',maxN=1000,num_test=10000):
         print "Training empirical"
         clf = GridSearchCV(DSEKL(),params_dksl,n_jobs=-1,verbose=1,cv=2).fit(Xtrain,Ytrain)
         Eemp.append(sp.mean(sp.sign(clf.best_estimator_.transform(Xtest))!=Ytest))
-        #clf_batch = GridSearchCV(svm.SVC(),params_batch,n_jobs=1000,verbose=1,cv=3).fit(Xtrain,Ytrain)
-        #Ebatch.append(sp.mean(clf_batch.best_estimator_.predict(Xtest)!=Ytest))
-        #print "Emp: %0.2f - Batch: %0.2f"%(Eemp[-1],Ebatch[-1])
         print "Emp: %0.2f"%(Eemp[-1])
         print clf.best_estimator_.get_params()
-        fname = custom_data_home + "clf_" + dname + "_nt" + str(N) + "_reps_damp_True_its_10000_nodiscount" + str(irep)
+        fname = custom_data_home + "clf_" + dname + "_nt" + str(N) + "_reps_damp_True_its_10000_nodiscount" + str(irep) + datetime.datetime.now()
         f = open(fname,'wb')
         print "saving to file:", fname
         pickle.dump(clf, f, pickle.HIGHEST_PROTOCOL)
-        #print clf_batch.best_estimator_.get_params()
     print "***************************************************************"
-    # print "Data set [%s]: Emp_avg: %0.2f+-%0.2f - Ebatch_avg: %0.2f+-%0.2f"%(dname,sp.array(Eemp).mean(),sp.array(Eemp).std(),sp.array(Ebatch).mean(),sp.array(Ebatch).std())
     print "Data set [%s]: Emp_avg: %0.2f+-%0.2f"%(dname,sp.array(Eemp).mean(),sp.array(Eemp).std())
     print "***************************************************************"
 
@@ -180,11 +172,7 @@ def run_realdata(reps=2,dname='sonar',maxN=1000):
     else:
         N = Xtotal.shape[0]
 
-    #N = Xtotal.shape[0]
-
     Eemp,Ebatch = [],[]
-
-
     num_train = int(0.9*N)
     for irep in range(reps):
         print "repetition:",irep," of ",reps
@@ -209,38 +197,21 @@ def run_realdata(reps=2,dname='sonar',maxN=1000):
         print "Training empirical"
         clf = GridSearchCV(DSEKL(),params_dksl,n_jobs=10,verbose=1,cv=3).fit(Xtrain,Ytrain)
         Eemp.append(sp.mean(sp.sign(clf.best_estimator_.transform(Xtest))!=Ytest))
-        #clf_batch = GridSearchCV(svm.SVC(),params_batch,n_jobs=1000,verbose=1,cv=3).fit(Xtrain,Ytrain)
-        #Ebatch.append(sp.mean(clf_batch.best_estimator_.predict(Xtest)!=Ytest))
-        #print "Emp: %0.2f - Batch: %0.2f"%(Eemp[-1],Ebatch[-1])
-        print "Emp: %0.2f"%(Eemp[-1])
+        clf_batch = GridSearchCV(svm.SVC(),params_batch,n_jobs=1000,verbose=1,cv=3).fit(Xtrain,Ytrain)
+        Ebatch.append(sp.mean(clf_batch.best_estimator_.predict(Xtest)!=Ytest))
+        print "Emp: %0.2f - Batch: %0.2f"%(Eemp[-1],Ebatch[-1])
         print clf.best_estimator_.get_params()
-        #print clf_batch.best_estimator_.get_params()
+        print clf_batch.best_estimator_.get_params()
     print "***************************************************************"
-    # print "Data set [%s]: Emp_avg: %0.2f+-%0.2f - Ebatch_avg: %0.2f+-%0.2f"%(dname,sp.array(Eemp).mean(),sp.array(Eemp).std(),sp.array(Ebatch).mean(),sp.array(Ebatch).std())
-    print "Data set [%s]: Emp_avg: %0.2f+-%0.2f"%(dname,sp.array(Eemp).mean(),sp.array(Eemp).std())
+    print "Data set [%s]: Emp_avg: %0.2f+-%0.2f - Ebatch_avg: %0.2f+-%0.2f"%(dname,sp.array(Eemp).mean(),sp.array(Eemp).std(),sp.array(Ebatch).mean(),sp.array(Ebatch).std())
     print "***************************************************************"
 
 
 
 
 if __name__ == '__main__':
-    # dname = sys.argv[1]
-    # N = int(sys.argv[2])
-    # nWorkers = int(sys.argv[3])
-    # nExpand = int(sys.argv[4])
-    # nits = int(sys.argv[5])
-    # cexp = int(sys.argv[6])
-    # dname = "sonar" #sys.argv[1]
-    # N = 1000 #int(sys.argv[2])
-    # nWorkers = 1 #int(sys.argv[3])
 
     # run_realdata(reps=10, dname='covertype', maxN=2000)
     hyperparameter_search_dskl(reps=2,dname="covertype",maxN=10000)
     # run_realdata_no_comparison(dname='covertype',n_its=20000,worker=1,maxN=15000)
 
-
-    # # plt.plot(DS.valErrors)
-    # # plt.show()
-    # # plt.plot(DS.trainErrors)
-    # # plt.show()
-    #

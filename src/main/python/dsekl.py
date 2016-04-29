@@ -1,9 +1,5 @@
-import os
-import sys
-import tempfile
 import numpy as np
 import scipy as sp
-from numpy import load
 
 import datetime
 from sklearn.base import BaseEstimator
@@ -12,7 +8,6 @@ from sklearn.externals.joblib import Parallel, delayed, dump, load
 
 def svm_gradient(X,y,w,n_pred_samples,n_expand_samples,C=.0001,sigma=1.,seed=1):
     if(seed < 0 or seed > 4294967295):
-        # print "caution! seed is:", seed, "setting to 1"
         seed = sp.random.randint(0, 4294967295)
     sp.random.seed(seed)
     # sample Kernel
@@ -181,6 +176,9 @@ class DSEKL(BaseEstimator, ClassifierMixin):
         return self
 
 
+    '''
+    method used now for prediction
+    '''
     def predict(self, Xtest):
         number_of_redraws = self.workers
 
@@ -191,8 +189,9 @@ class DSEKL(BaseEstimator, ClassifierMixin):
         yhat = sp.sign(sp.vstack(yraw).mean(axis=0))
         return yhat
 
-
-
+    '''
+    try to evaluate on all points
+    '''
     def predict_all_subsample(self,Xtest):
         # do in several steps:
         n = int(self.w.shape[0]/10000.0)
@@ -209,7 +208,9 @@ class DSEKL(BaseEstimator, ClassifierMixin):
         yhat = sp.sign(sp.vstack(yraw).mean(axis=0))
         return yhat
 
-
+    '''
+    tries to smartly preselect support vectors
+    '''
     def predict_support(self, Xtest):
         # percentile_1 = np.percentile(self.w,10)
         # percentile_2 = np.percentile(self.w,90)
