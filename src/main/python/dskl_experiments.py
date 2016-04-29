@@ -139,7 +139,7 @@ def hyperparameter_search_dskl(reps=2,dname='sonar',maxN=1000,num_test=10000):
             Xtrain = scaler.transform(Xtrain)
             Xtest = scaler.transform(Xtest)
         print "Training empirical"
-        clf = GridSearchCV(DSEKL(),params_dksl,n_jobs=1000,verbose=1,cv=2).fit(Xtrain,Ytrain)
+        clf = GridSearchCV(DSEKL(),params_dksl,n_jobs=-1,verbose=1,cv=2).fit(Xtrain,Ytrain)
         Eemp.append(sp.mean(sp.sign(clf.best_estimator_.transform(Xtest))!=Ytest))
         #clf_batch = GridSearchCV(svm.SVC(),params_batch,n_jobs=1000,verbose=1,cv=3).fit(Xtrain,Ytrain)
         #Ebatch.append(sp.mean(clf_batch.best_estimator_.predict(Xtest)!=Ytest))
