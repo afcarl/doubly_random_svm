@@ -104,7 +104,7 @@ def hyperparameter_search_dskl(reps=2,dname='sonar',maxN=1000,num_test=10000):
         'n_pred_samples': [N/2*0.01,N/2*0.02,N/2*0.03],
         'n_expand_samples': [N/2*0.01,N/2*0.02,N/2*0.03],
         'n_its': [10000],
-        'eta': [0.99999],
+        'eta': [1.],#[0.99999],
         'C': 10.  **sp.arange(-8.,4.,2.),#[1e-6],#
         'gamma': 10. **sp.arange(-4.,4.,2.),#[10.]#
         'workers': [48],
