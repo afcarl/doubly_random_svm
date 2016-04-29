@@ -118,15 +118,6 @@ class DSEKL(BaseEstimator, ClassifierMixin):
         self.classes_ = sp.unique(y)
         assert(all(self.classes_==[-1.,1.]))
 
-        # folder = tempfile.mkdtemp()
-        # data_name = os.path.join(folder, 'data')
-        # dump(X, data_name)
-        # self.X = load(data_name, mmap_mode='r')
-        # target_name = os.path.join(folder, 'target')
-        # dump(y, target_name)
-        # self.y = load(target_name, mmap_mode='r')
-        # w_name = os.path.join(folder, 'weights')
-        # w = np.memmap(w_name, dtype=sp.float128, shape=(len(y)), mode='w+')
 
         # w[:] = sp.float128(sp.randn(len(y)))
         w = sp.float128(sp.randn(len(y)))
