@@ -170,10 +170,11 @@ class DSEKL(BaseEstimator, ClassifierMixin):
 
             for i in tmpw.nonzero()[0]:
                 if self.damp:
-                    w[i] -= tmpw[i] / sp.sqrt(G[i])
+                    w[i] -= self.eta * tmpw[i] / sp.sqrt(G[i])
                 else:
-                    w[i] -= tmpw[i] #/ sp.sqrt(G[i])
+                    w[i] -= self.eta * tmpw[i] #/ sp.sqrt(G[i])
 
+            self.eta = self.eta * self.eta
             self.w = w.copy()
 
         self.w = w.copy()
