@@ -84,8 +84,8 @@ def run_realdata_no_comparison(dname='sonar', n_its=1000, percent_train=0.9, wor
     '''
     print "starting training process",datetime.datetime.now()
     # max: n_pred_samples=15000,n_expand_samples=15000
-    worker = 1
-    DS = DSEKL(n_pred_samples=15000,n_expand_samples=15000,n_its=n_its,C=1e-08,gamma=1.0,workers=worker,validation=True,verbose=True).fit(Xtrain,Ytrain)
+    worker = 8
+    DS = DSEKL(n_pred_samples=5000,n_expand_samples=5000,n_its=n_its,C=1e-08,gamma=1.0,workers=worker,validation=True,verbose=True).fit(Xtrain,Ytrain)
     # svm = svm.SVC(n_its=n_its,C=9.9999999999999995e-07,gamma=1.0)
     # print "test result all:", sp.mean(sp.sign(DS.predict_all(Xtest))!=Ytest)
     # print "smart subsample:", sp.mean(sp.sign(DS.predict_support(Xtest))!=Ytest)
@@ -103,13 +103,16 @@ def hyperparameter_search_dskl(reps=2,dname='sonar',maxN=1000,percent_test=0.9):
     num_train = int(percent_test * N)
 
     params_dksl = {
-        'n_pred_samples': [500],
-        'n_expand_samples': [500],
+        'n_pred_samples': [num_train*0.01,num_train*0.02,num_train*0.03],
+        'n_expand_samples': [num_train*0.01,num_train*0.02,num_train*0.03],
         'n_its': [1000],
         'eta': [1.],
-        'C': [10.], #** sp.arange(-8., 4., 5.),  # **sp.arange(-8,-6,1),#[1e-6],#
-        'gamma': [10.], #** sp.arange(-4., 4., 5.),  # **sp.arange(-1.,2.,1)#[10.]#
-        'workers': [10]
+        'C': 10. ** sp.arange(-8., 4., 5.),  # **sp.arange(-8,-6,1),#[1e-6],#
+        'gamma': 10. ** sp.arange(-4., 4., 5.),  # **sp.arange(-1.,2.,1)#[10.]#
+        'workers': [8],
+        #'validation': [False],
+        #'damp:': [True,False]#,
+        #'verbose': [False]#,
     }
 
     Eemp = []
@@ -135,7 +138,7 @@ def hyperparameter_search_dskl(reps=2,dname='sonar',maxN=1000,percent_test=0.9):
             Xtrain = scaler.transform(Xtrain)
             Xtest = scaler.transform(Xtest)
         print "Training empirical"
-        clf = GridSearchCV(DSEKL(),params_dksl,n_jobs=10,verbose=1,cv=3).fit(Xtrain,Ytrain)
+        clf = GridSearchCV(DSEKL(),params_dksl,n_jobs=8,verbose=1,cv=3).fit(Xtrain,Ytrain)
         Eemp.append(sp.mean(sp.sign(clf.best_estimator_.transform(Xtest))!=Ytest))
         #clf_batch = GridSearchCV(svm.SVC(),params_batch,n_jobs=1000,verbose=1,cv=3).fit(Xtrain,Ytrain)
         #Ebatch.append(sp.mean(clf_batch.best_estimator_.predict(Xtest)!=Ytest))
@@ -231,8 +234,8 @@ if __name__ == '__main__':
     # nWorkers = 1 #int(sys.argv[3])
 
     # run_realdata(reps=10, dname='covertype', maxN=2000)
-    # hyperparameter_search_dskl(reps=2,dname="covertype",maxN=1000)
-    run_realdata_no_comparison(dname='covertype',n_its=20000,worker=1,maxN=-1)
+    hyperparameter_search_dskl(reps=2,dname="covertype",maxN=30000)
+    # run_realdata_no_comparison(dname='covertype',n_its=20000,worker=1,maxN=15000)
 
 
     # # plt.plot(DS.valErrors)

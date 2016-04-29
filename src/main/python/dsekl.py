@@ -81,7 +81,7 @@ class DSEKL(BaseEstimator, ClassifierMixin):
     """
     Doubly Stochastic Empirical Kernel Learning (for now only with SVM and RBF kernel)
     """
-    def __init__(self,n_expand_samples=100,n_pred_samples=100,n_its=100,eta=1.,C=.001,gamma=1.,workers=1,validation=False,verbose=False):
+    def __init__(self,n_expand_samples=100,n_pred_samples=100,n_its=100,eta=1.,C=.001,gamma=1.,workers=1,damp=True,validation=False,verbose=False):
         self.n_expand_samples=n_expand_samples
         self.n_pred_samples=n_pred_samples
         self.n_its = n_its
@@ -90,6 +90,7 @@ class DSEKL(BaseEstimator, ClassifierMixin):
         self.gamma = gamma
         self.workers = workers
         self.verbose = verbose
+        self.damp = damp
         self.validation = validation
         pass
 
@@ -163,11 +164,15 @@ class DSEKL(BaseEstimator, ClassifierMixin):
 
             tmpw = sp.zeros(len(y))
             for g in gradients:
-                G[g[1]] += g[0]**2
+                if self.damp:
+                    G[g[1]] += g[0]**2
                 tmpw[g[1]] += g[0]
 
             for i in tmpw.nonzero()[0]:
-                w[i] -= tmpw[i] / sp.sqrt(G[i])
+                if self.damp:
+                    w[i] -= tmpw[i] / sp.sqrt(G[i])
+                else:
+                    w[i] -= tmpw[i] #/ sp.sqrt(G[i])
 
             self.w = w.copy()
 
