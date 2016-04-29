@@ -158,7 +158,7 @@ class DSEKL(BaseEstimator, ClassifierMixin):
                            sp.linalg.norm(oldw - w))
 
             oldw = w.copy()
-            seeds = np.random.randint(0, high=sys.maxint, size=self.workers)
+            seeds = np.random.randint(0, high=4294967295, size=self.workers)
             gradients = Parallel(n_jobs=-1)(delayed(svm_gradient)(self.X, self.y, \
                                                                        w.copy(), self.n_pred_samples, self.n_expand_samples, C=self.C, sigma=self.gamma, seed=seeds[i]) for i in range(self.workers))
 
