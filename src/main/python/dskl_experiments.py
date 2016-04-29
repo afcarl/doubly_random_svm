@@ -84,8 +84,8 @@ def run_realdata_no_comparison(dname='sonar', n_its=1000, percent_train=0.9, wor
     '''
     print "starting training process",datetime.datetime.now()
     # max: n_pred_samples=15000,n_expand_samples=15000
-    worker = 8
-    DS = DSEKL(n_pred_samples=5000,n_expand_samples=5000,n_its=n_its,C=1e-08,gamma=1.0,workers=worker,validation=True,verbose=True).fit(Xtrain,Ytrain)
+    worker = 48
+    DS = DSEKL(n_pred_samples=15000,n_expand_samples=15000,n_its=n_its,C=1e-08,gamma=1.0,workers=worker,validation=True,verbose=True).fit(Xtrain,Ytrain)
     # svm = svm.SVC(n_its=n_its,C=9.9999999999999995e-07,gamma=1.0)
     # print "test result all:", sp.mean(sp.sign(DS.predict_all(Xtest))!=Ytest)
     # print "smart subsample:", sp.mean(sp.sign(DS.predict_support(Xtest))!=Ytest)
@@ -103,8 +103,8 @@ def hyperparameter_search_dskl(reps=2,dname='sonar',maxN=1000,num_test=10000):
     params_dksl = {
         'n_pred_samples': [N/2*0.01,N/2*0.02,N/2*0.03],
         'n_expand_samples': [N/2*0.01,N/2*0.02,N/2*0.03],
-        'n_its': [1000],
-        'eta': [1.],
+        'n_its': [10000],
+        'eta': [0.99999],
         'C': 10.  **sp.arange(-8.,4.,2.),#[1e-6],#
         'gamma': 10. **sp.arange(-4.,4.,2.),#[10.]#
         'workers': [48],
@@ -146,7 +146,7 @@ def hyperparameter_search_dskl(reps=2,dname='sonar',maxN=1000,num_test=10000):
         #print "Emp: %0.2f - Batch: %0.2f"%(Eemp[-1],Ebatch[-1])
         print "Emp: %0.2f"%(Eemp[-1])
         print clf.best_estimator_.get_params()
-        fname = custom_data_home + "clf_" + dname + "_nt" + str(N) + "_reps_damp_False" + str(irep)
+        fname = custom_data_home + "clf_" + dname + "_nt" + str(N) + "_reps_damp_True_its_10000" + str(irep)
         f = open(fname,'wb')
         print "saving to file:", fname
         pickle.dump(clf, f, pickle.HIGHEST_PROTOCOL)
@@ -235,7 +235,7 @@ if __name__ == '__main__':
     # nWorkers = 1 #int(sys.argv[3])
 
     # run_realdata(reps=10, dname='covertype', maxN=2000)
-    hyperparameter_search_dskl(reps=2,dname="covertype",maxN=5000)
+    hyperparameter_search_dskl(reps=2,dname="covertype",maxN=10000)
     # run_realdata_no_comparison(dname='covertype',n_its=20000,worker=1,maxN=15000)
 
 
