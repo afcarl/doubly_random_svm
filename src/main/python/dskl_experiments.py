@@ -146,7 +146,7 @@ def hyperparameter_search_dskl(reps=2,dname='sonar',maxN=1000,num_test=10000):
         #print "Emp: %0.2f - Batch: %0.2f"%(Eemp[-1],Ebatch[-1])
         print "Emp: %0.2f"%(Eemp[-1])
         print clf.best_estimator_.get_params()
-        fname = custom_data_home + "clf_" + dname + "_nt" + str(N) + "_reps" + str(irep)
+        fname = custom_data_home + "clf_" + dname + "_nt" + str(N) + "_reps_damp_False" + str(irep)
         f = open(fname,'wb')
         print "saving to file:", fname
         pickle.dump(clf, f, pickle.HIGHEST_PROTOCOL)
