@@ -80,6 +80,7 @@ class DSEKL(BaseEstimator, ClassifierMixin):
         self.n_expand_samples=n_expand_samples
         self.n_pred_samples=n_pred_samples
         self.n_its = n_its
+        self.eta_start = eta
         self.eta = eta
         self.C = C
         self.gamma = gamma
@@ -127,7 +128,7 @@ class DSEKL(BaseEstimator, ClassifierMixin):
         it = 0
         # for it in range(self.n_its/self.workers):
         delta_w = 5
-        while(it < int(self.n_its / self.workers)):
+        while(it < int(self.n_its / self.workers) and delta_w > 1.):
             it += 1
 
             if self.verbose:
@@ -139,7 +140,7 @@ class DSEKL(BaseEstimator, ClassifierMixin):
                     if self.validation:
                         val_error = (sp.sign(self.predict(Xval)) != Yval).mean()
                         self.valErrors.append(val_error)
-                        print "Validation-Error: %0.2f"%(val_error)
+                        print "Validation-Error: %0.2f, discount: %0.10f"%(val_error,self.eta)
                     # self.trainErrors.append(train_error)
                     # print "%i iterations Train-Error: %0.2f Validation-Error: %0.2f, change w: %0.2f" % \
                     #       (it,
@@ -151,6 +152,7 @@ class DSEKL(BaseEstimator, ClassifierMixin):
                     print "%i iterations, change w: %0.2f" % \
                           (it,
                            sp.linalg.norm(oldw - w))
+
 
             oldw = w.copy()
             seeds = np.random.randint(0, high=4294967295, size=self.workers)
@@ -169,9 +171,9 @@ class DSEKL(BaseEstimator, ClassifierMixin):
                 else:
                     w[i] -= self.eta * tmpw[i] #/ sp.sqrt(G[i])
 
-            self.eta = self.eta * self.eta
+            self.eta = self.eta * self.eta_start
             self.w = w.copy()
-
+            delta_w = sp.linalg.norm(oldw - w)
         self.w = w.copy()
         return self
 
@@ -179,9 +181,8 @@ class DSEKL(BaseEstimator, ClassifierMixin):
     '''
     method used now for prediction
     '''
-    def predict(self, Xtest):
-        number_of_redraws = self.workers
-
+    def predict(self, Xtest,number_of_redraws=100):
+        # number_of_redraws = self.workers
         yraw = Parallel(n_jobs=-1)(delayed(svm_predict_raw)(self.X, Xtest, \
                                                             self.w, self.n_expand_samples, self.gamma, i) for i in
                                    range(number_of_redraws))
@@ -211,7 +212,7 @@ class DSEKL(BaseEstimator, ClassifierMixin):
     '''
     tries to smartly preselect support vectors
     '''
-    def predict_support(self, Xtest):
+    def predict_support_hardlimits(self, Xtest):
         # percentile_1 = np.percentile(self.w,10)
         # percentile_2 = np.percentile(self.w,90)
         # idx = np.append(np.where(self.w > percentile_2)[0], np.where(self.w < percentile_1))
@@ -227,6 +228,30 @@ class DSEKL(BaseEstimator, ClassifierMixin):
         # cut off if too many
         if(idx.shape[0] > 400):
             idx = np.random.permutation(idx)[:400]
+        print "found %i support vectors" % (idx.shape[0])
+        K = GaussKernMini(Xtest.T, self.X[idx, :].T, self.gamma)
+        # compute predictions
+        return K.dot(self.w[idx])
+
+    '''
+    tries to smartly preselect support vectors
+    '''
+    def predict_support_percentiles(self, Xtest):
+        percentile_1 = np.percentile(self.w,10)
+        percentile_2 = np.percentile(self.w,90)
+        idx = np.append(np.where(self.w > percentile_2)[0], np.where(self.w < percentile_1))
+
+        print "self.w.shape[0] = ",self.w.shape[0]
+
+        # idx = np.append(np.where(self.w > 0.1)[0], np.where(self.w < -0.1))
+
+        print "idx.shape[0]", idx.shape[0]
+        # print percentile_1,percentile_2
+        # print "found %i support vectors percentile1: %0.2f percentile2: %0.2f" % (idx.shape[0],percentile_1,percentile_2)
+
+        # cut off if too many
+        # if(idx.shape[0] > 400):
+        #     idx = np.random.permutation(idx)[:400]
         print "found %i support vectors" % (idx.shape[0])
         K = GaussKernMini(Xtest.T, self.X[idx, :].T, self.gamma)
         # compute predictions

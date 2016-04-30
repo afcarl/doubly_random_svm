@@ -18,7 +18,7 @@ def run_all_realdata(dnames=['sonar','mushroom','skin_nonskin','covertype','diab
     [run_realdata(dname=d) for d in dnames]
 
 
-def run_realdata_no_comparison(dname='sonar', n_its=1000, percent_train=0.9, worker=8, maxN=1000):
+def run_realdata_no_comparison(dname='sonar', n_its=1000, num_test=1000, worker=8, maxN=1000):
     print "started loading:", datetime.datetime.now()
     Xtotal, Ytotal = load_realdata(dname)
 
@@ -28,22 +28,23 @@ def run_realdata_no_comparison(dname='sonar', n_its=1000, percent_train=0.9, wor
     if maxN > 0:
         N = sp.minimum(Xtotal.shape[0], maxN)
 
-    Xtotal = Xtotal[:N]
-    Ytotal = Ytotal[:N]
+    Xtotal = Xtotal[:N + num_test]
+    Ytotal = Ytotal[:N + num_test]
 
     # randomize datapoints
     print "randomization", datetime.datetime.now()
+    sp.random.seed(0)
     idx = sp.random.permutation(Xtotal.shape[0])
+    print idx
     Xtotal = Xtotal[idx]
     Ytotal = Ytotal[idx]
 
     # divide test and train
-    n_train = int(N * percent_train)
     print "dividing in train and test", datetime.datetime.now()
-    Xtest = Xtotal[n_train:]
-    Ytest = Ytotal[n_train:]
-    Xtrain = Xtotal[:n_train]
-    Ytrain = Ytotal[:n_train]
+    Xtest = Xtotal[N:N+num_test]
+    Ytest = Ytotal[N:N+num_test]
+    Xtrain = Xtotal[:N]
+    Ytrain = Ytotal[:N]
 
     print "densifying", datetime.datetime.now()
     # unit variance and zero mean
@@ -81,12 +82,87 @@ def run_realdata_no_comparison(dname='sonar', n_its=1000, percent_train=0.9, wor
     '''
     print "starting training process",datetime.datetime.now()
     # max: n_pred_samples=15000,n_expand_samples=15000
-    worker = 48
-    DS = DSEKL(n_pred_samples=15000,n_expand_samples=15000,n_its=n_its,C=1e-08,gamma=1.0,workers=worker,validation=True,verbose=True).fit(Xtrain,Ytrain)
+    DS = DSEKL(n_pred_samples=500,n_expand_samples=500,eta=0.99,n_its=n_its,C=1e-08,gamma=1.0,workers=worker,validation=True,verbose=True).fit(Xtrain,Ytrain)
+    pickle.dump(DS,file("DS","wb"),pickle.HIGHEST_PROTOCOL)
+
     # svm = svm.SVC(n_its=n_its,C=9.9999999999999995e-07,gamma=1.0)
     # print "test result all:", sp.mean(sp.sign(DS.predict_all(Xtest))!=Ytest)
     # print "smart subsample:", sp.mean(sp.sign(DS.predict_support(Xtest))!=Ytest)
     print "test result subsample:", sp.mean(sp.sign(DS.predict(Xtest))!=Ytest)
+
+def dsekl_test_predict(dname='sonar', num_test=1000, maxN=1000):
+    print "started loading:", datetime.datetime.now()
+    Xtotal, Ytotal = load_realdata(dname)
+
+    print "loading data done!", datetime.datetime.now()
+    # decrease dataset size
+    N = Xtotal.shape[0]
+    if maxN > 0:
+        N = sp.minimum(Xtotal.shape[0], maxN)
+
+    Xtotal = Xtotal[:N + num_test]
+    Ytotal = Ytotal[:N + num_test]
+
+    # randomize datapoints
+    print "randomization", datetime.datetime.now()
+    sp.random.seed(0)
+    idx = sp.random.permutation(Xtotal.shape[0])
+    print idx
+    Xtotal = Xtotal[idx]
+    Ytotal = Ytotal[idx]
+
+    # divide test and train
+    print "dividing in train and test", datetime.datetime.now()
+    Xtest = Xtotal[N:N+num_test]
+    Ytest = Ytotal[N:N+num_test]
+    Xtrain = Xtotal[:N]
+    Ytrain = Ytotal[:N]
+
+    print "densifying", datetime.datetime.now()
+    # unit variance and zero mean
+    Xtrain = Xtrain.todense()
+    Xtest = Xtest.todense()
+
+    if not sp.sparse.issparse(Xtrain):
+        scaler = StandardScaler()
+        print "fitting scaler", datetime.datetime.now()
+        scaler.fit(Xtrain)  # Don't cheat - fit only on training data
+        print "transforming data train", datetime.datetime.now()
+        Xtrain = scaler.transform(Xtrain)
+        print "transforming data test", datetime.datetime.now()
+        Xtest = scaler.transform(Xtest)
+    else:
+        scaler = StandardScaler(with_mean=False)
+        scaler.fit(Xtrain)
+        Xtrain = scaler.transform(Xtrain)
+        Xtest = scaler.transform(Xtest)
+
+    DS = pickle.load(file("DS","rb"))
+
+    res_hl = DS.predict_support_hardlimits(Xtest)
+    res_hl = sp.mean(sp.sign(res_hl) != Ytest)
+    print "res_hl",res_hl
+    res_perc = DS.predict_support_percentiles(Xtest)
+    res_perc = sp.mean(sp.sign(res_perc) != Ytest)
+    print "res_perc",res_perc
+
+
+    # res_1000 = DS.predict(Xtest,number_of_redraws=1000)
+    # res_1000 = sp.mean(sp.sign(res_1000) != Ytest)
+    # print "res_1000",res_1000
+    # res_100 = DS.predict(Xtest,number_of_redraws=100)
+    # res_100 = sp.mean(sp.sign(res_100) != Ytest)
+    # print "res_100",res_100
+    # res_10 = DS.predict(Xtest,number_of_redraws=10)
+    # res_10 = sp.mean(sp.sign(res_10) != Ytest)
+    # print "res_10",res_10
+    # res_1 = DS.predict(Xtest,number_of_redraws=1)
+    # res_1 = sp.mean(sp.sign(res_1) != Ytest)
+    # print "res_1",res_1
+    # res_all = DS.predict_all(Xtest)
+    # res_all = sp.mean(sp.sign(res_all) != Ytest)
+    # print "res_all",res_all
+
 
 
 def hyperparameter_search_dskl(reps=2,dname='sonar',maxN=1000,num_test=10000):
@@ -210,8 +286,8 @@ def run_realdata(reps=2,dname='sonar',maxN=1000):
 
 
 if __name__ == '__main__':
-
+    dsekl_test_predict(dname='covertype',maxN=1000,num_test=10000)
     # run_realdata(reps=10, dname='covertype', maxN=2000)
-    hyperparameter_search_dskl(reps=2,dname="covertype",maxN=10000)
-    # run_realdata_no_comparison(dname='covertype',n_its=20000,worker=1,maxN=15000)
+    # hyperparameter_search_dskl(reps=2,dname="covertype",maxN=10000)
+    # run_realdata_no_comparison(dname='covertype',n_its=20000,worker=8,maxN=1000,num_test=10000)
 
