@@ -10,8 +10,7 @@ from sklearn.preprocessing import StandardScaler
 
 
 from dataio import load_realdata, custom_data_home
-from dsekl import DSEKL
-
+from dsekl import DSEKL, DSEKLBATCH
 
 
 def run_all_realdata(dnames=['sonar','mushroom','skin_nonskin','covertype','diabetes','gisette']):
@@ -28,8 +27,9 @@ def run_realdata_no_comparison(dname='sonar', n_its=1000, num_test=1000, worker=
     if maxN > 0:
         N = sp.minimum(Xtotal.shape[0], maxN)
 
-    Xtotal = Xtotal[:N + num_test]
-    Ytotal = Ytotal[:N + num_test]
+    assert(N + num_test < Xtotal.shape[0])
+    # Xtotal = Xtotal[:N + num_test]
+    # Ytotal = Ytotal[:N + num_test]
 
     # randomize datapoints
     print "randomization", datetime.datetime.now()
@@ -41,10 +41,10 @@ def run_realdata_no_comparison(dname='sonar', n_its=1000, num_test=1000, worker=
 
     # divide test and train
     print "dividing in train and test", datetime.datetime.now()
-    Xtest = Xtotal[N:N+num_test]
-    Ytest = Ytotal[N:N+num_test]
-    Xtrain = Xtotal[:N]
-    Ytrain = Ytotal[:N]
+    Xtest = Xtotal[-num_test:]
+    Ytest = Ytotal[-num_test:]
+    Xtrain = Xtotal[0:N]
+    Ytrain = Ytotal[0:N]
 
     print "densifying", datetime.datetime.now()
     # unit variance and zero mean
@@ -82,8 +82,8 @@ def run_realdata_no_comparison(dname='sonar', n_its=1000, num_test=1000, worker=
     '''
     print "starting training process",datetime.datetime.now()
     # max: n_pred_samples=15000,n_expand_samples=15000
-    DS = DSEKL(n_pred_samples=500,n_expand_samples=500,eta=0.99,n_its=n_its,C=1e-08,gamma=1.0,workers=worker,validation=True,verbose=True).fit(Xtrain,Ytrain)
-    pickle.dump(DS,file("DS","wb"),pickle.HIGHEST_PROTOCOL)
+    DS = DSEKLBATCH(n_pred_samples=6000,n_expand_samples=6000,eta=0.999,n_its=n_its,C=1e-08,gamma=1.0,damp=True,workers=worker,validation=True,verbose=True).fit(Xtrain,Ytrain)
+    pickle.dump(DS,file("DSBatch","wb"),pickle.HIGHEST_PROTOCOL)
 
     # svm = svm.SVC(n_its=n_its,C=9.9999999999999995e-07,gamma=1.0)
     # print "test result all:", sp.mean(sp.sign(DS.predict_all(Xtest))!=Ytest)
@@ -174,13 +174,15 @@ def hyperparameter_search_dskl(reps=2,dname='sonar',maxN=1000,num_test=10000):
         N = Xtotal.shape[0]
 
     params_dksl = {
-        'n_pred_samples': [N/2*0.01,N/2*0.02,N/2*0.03],
-        'n_expand_samples': [N/2*0.01,N/2*0.02,N/2*0.03],
+        'n_pred_samples': [6000],#[int(N/2*0.01)],#,int(N/2*0.02),int(N/2*0.03)],
+        'n_expand_samples': [6000],#[int(N/2*0.01)],#,int(N/2*0.02),int(N/2*0.03)],
         'n_its': [10000],
-        'eta': [1.],
-        'C': 10.  **sp.arange(-8.,4.,2.),
-        'gamma': 10. **sp.arange(-4.,4.,2.),
-        'workers': [48],
+        'eta': [0.999],
+        'C': 10. ** sp.arange(-8., 4., 2.),
+        'gamma': 10. ** sp.arange(-4., 4., 2.),
+        #'C': 10.  **sp.arange(-64.,10.,10),
+        #'gamma': 10. **sp.arange(-1.,2.,.5),
+        'workers': [8],
         #'validation': [False],
         #'damp:': [True,False]#,
         #'verbose': [False]#,
@@ -199,8 +201,8 @@ def hyperparameter_search_dskl(reps=2,dname='sonar',maxN=1000,num_test=10000):
         Xtest = Xtotal[idx[N:N+num_test],:]
         Ytest = Ytotal[idx[N:N+num_test]]
 
-        Xtrain = Xtrain.todense()
-        Xtest = Xtest.todense()
+        # Xtrain = Xtrain.todense()
+        # Xtest = Xtest.todense()
         if not sp.sparse.issparse(Xtrain):
             scaler = StandardScaler()
             scaler.fit(Xtrain)  # Don't cheat - fit only on training data
@@ -212,11 +214,12 @@ def hyperparameter_search_dskl(reps=2,dname='sonar',maxN=1000,num_test=10000):
             Xtrain = scaler.transform(Xtrain)
             Xtest = scaler.transform(Xtest)
         print "Training empirical"
-        clf = GridSearchCV(DSEKL(),params_dksl,n_jobs=-1,verbose=1,cv=2).fit(Xtrain,Ytrain)
+        # clf = GridSearchCV(DSEKL(),params_dksl,n_jobs=-1,verbose=1,cv=2).fit(Xtrain,Ytrain)
+        clf = GridSearchCV(DSEKLBATCH(),params_dksl,n_jobs=-1,verbose=1,cv=2).fit(Xtrain,Ytrain)
         Eemp.append(sp.mean(sp.sign(clf.best_estimator_.transform(Xtest))!=Ytest))
         print "Emp: %0.2f"%(Eemp[-1])
         print clf.best_estimator_.get_params()
-        fname = custom_data_home + "clf_" + dname + "_nt" + str(N) + "_reps_damp_True_its_10000_nodiscount" + str(irep) + datetime.datetime.now()
+        fname = custom_data_home + "clf_" + dname + "_nt" + str(N) + "_reps_damp_True_its_10000_nodiscount" + str(irep) + str(datetime.datetime.now())
         f = open(fname,'wb')
         print "saving to file:", fname
         pickle.dump(clf, f, pickle.HIGHEST_PROTOCOL)
@@ -258,8 +261,8 @@ def run_realdata(reps=2,dname='sonar',maxN=1000):
         Xtest = Xtotal[idx[num_train:],:]
         Ytest = Ytotal[idx[num_train:]]
 
-        Xtrain = Xtrain.todense()
-        Xtest = Xtest.todense()
+        # Xtrain = Xtrain.todense()
+        # Xtest = Xtest.todense()
         if not sp.sparse.issparse(Xtrain):
             scaler = StandardScaler()
             scaler.fit(Xtrain)  # Don't cheat - fit only on training data
@@ -271,7 +274,7 @@ def run_realdata(reps=2,dname='sonar',maxN=1000):
             Xtrain = scaler.transform(Xtrain)
             Xtest = scaler.transform(Xtest)
         print "Training empirical"
-        clf = GridSearchCV(DSEKL(),params_dksl,n_jobs=10,verbose=1,cv=3).fit(Xtrain,Ytrain)
+        clf = GridSearchCV(DSEKL(),params_dksl,n_jobs=10,verbose=1,cv=2).fit(Xtrain,Ytrain)
         Eemp.append(sp.mean(sp.sign(clf.best_estimator_.transform(Xtest))!=Ytest))
         clf_batch = GridSearchCV(svm.SVC(),params_batch,n_jobs=1000,verbose=1,cv=3).fit(Xtrain,Ytrain)
         Ebatch.append(sp.mean(clf_batch.best_estimator_.predict(Xtest)!=Ytest))
@@ -286,8 +289,9 @@ def run_realdata(reps=2,dname='sonar',maxN=1000):
 
 
 if __name__ == '__main__':
-    dsekl_test_predict(dname='covertype',maxN=1000,num_test=10000)
+    # dsekl_test_predict(dname='covertype',maxN=1000,num_test=10000)
     # run_realdata(reps=10, dname='covertype', maxN=2000)
-    # hyperparameter_search_dskl(reps=2,dname="covertype",maxN=10000)
-    # run_realdata_no_comparison(dname='covertype',n_its=20000,worker=8,maxN=1000,num_test=10000)
+    hyperparameter_search_dskl(reps=2,dname="covertype",maxN=100000,num_test=1000)
+    # run_realdata_no_comparison(dname='covertype',n_its=20000,worker=8,maxN=400000,num_test=10000)
+    # run_realdata_no_comparison(dname='covertype',n_its=1000,worker=8,maxN=10000,num_test=20000)
 
