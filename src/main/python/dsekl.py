@@ -1,12 +1,19 @@
 import numpy as np
+import os
 import scipy as sp
 
 import datetime
+import tempfile
+
 from sklearn.base import BaseEstimator
 from sklearn.base import ClassifierMixin
 from sklearn.externals.joblib import Parallel, delayed, dump, load
 from sklearn.utils import shuffle
 
+
+home_dir_server = "/data/users/nsteenbergen/"
+if not os.path.isdir(home_dir_server):
+    home_dir_server = tempfile.mkdtemp()
 
 def svm_gradient(X,y,w,n_pred_samples,n_expand_samples,C=.0001,sigma=1.,seed=1):
     if(seed < 0 or seed > 4294967295):
@@ -147,12 +154,26 @@ class DSEKL(BaseEstimator, ClassifierMixin):
         self.w = w.copy()
         oldw = w.copy()
         it = 0
+
+
+
+        data_name = os.path.join(home_dir_server, 'data')
+        dump(X, data_name)
+        self.X = load()
+        self.X = load(data_name, mmap_mode='r')
+        target_name = os.path.join(home_dir_server, 'target')
+        dump(y, target_name)
+        self.y = load(target_name, mmap_mode='r')
+        w_name = os.path.join(home_dir_server, 'weights')
+        w = np.memmap(w_name, dtype=sp.float128, shape=(len(y)), mode='w+')
+
+
         # for it in range(self.n_its/self.workers):
         delta_w = 5
         while(it < int(self.n_its / self.workers) and delta_w > 1.):
             it += 1
 
-            if self.verbose:
+            if self.verbose and it != 1:
                 print "iteration %i of %0.2f" % (it, int(self.n_its / self.workers))
                 if it * self.workers % 1 == 0:
                     # # train_error = (sp.sign(svm_predict_all(self.X, X, w, self.gamma)) != self.y).mean()
@@ -308,7 +329,7 @@ class DSEKLBATCH(BaseEstimator, ClassifierMixin):
         idx = np.random.permutation(len(y))
 
         if self.validation:
-            traintestsplit = len(y)*.05
+            traintestsplit = len(y)*0.002
             validx = idx[-traintestsplit:]
             trainidx = idx[:-traintestsplit]
             Xval = X[validx,:].copy()
@@ -348,7 +369,8 @@ class DSEKLBATCH(BaseEstimator, ClassifierMixin):
                 print "Training DSEKL on %d samples and validating on %d"%(len(idx),traintestsplit)
             else:
                 print "Training DSEKL on %d samples" % (len(idx))
-            print "using %i workers"%(self.workers)
+
+            print "\nhyperparameters:\nn_expand_samples: ",self.n_expand_samples,"\nn_pred_samples: ",self.n_pred_samples,"\neta: ",self.eta_start,"\nC: ",self.C,"\ngamma: ",self.gamma,"\nworker: ",self.workers,"\ndamp: ",self.damp,"\nvalidation: ",self.validation,"\n"
 
         self.classes_ = sp.unique(y)
         assert(all(self.classes_==[-1.,1.]))
@@ -367,10 +389,10 @@ class DSEKLBATCH(BaseEstimator, ClassifierMixin):
         # for it in range(self.n_its/self.workers):
         delta_w = 50
         # while(it < int(self.n_its / self.workers) and delta_w > 1.):
-        while ( it < self.n_its and delta_w > 8.):
+        while ( it < self.n_its and delta_w > 1.):
             it += 1
 
-            if self.verbose:
+            if self.verbose and it != 1:
                 print "iteration %i of %0.2f" % (it, self.n_its)
                 if it * self.workers % 1 == 0:
                     # # train_error = (sp.sign(svm_predict_all(self.X, X, w, self.gamma)) != self.y).mean()
@@ -412,7 +434,7 @@ class DSEKLBATCH(BaseEstimator, ClassifierMixin):
                 X_pred_id = self.X_pred_ids[i]
                 if self.verbose:
                     print "training on batch:",i, " of ",len(self.X_pred_ids), datetime.datetime.now()
-                gradients = Parallel(n_jobs=self.workers) (delayed(svm_gradient_batch)(self.X, self.y, w.copy(), X_pred_id, X_exp_id, C=self.C, sigma=self.gamma) for X_exp_id in self.X_exp_ids)
+                gradients = Parallel(n_jobs=self.workers,max_nbytes='1000000M') (delayed(svm_gradient_batch)(self.X, self.y, w.copy(), X_pred_id, X_exp_id, C=self.C, sigma=self.gamma) for X_exp_id in self.X_exp_ids)
                 # gradients = Parallel(n_jobs=-1)(delayed(svm_gradient)(self.X, self.y, \
                 #                                                            w.copy(), self.n_pred_samples, self.n_expand_samples, C=self.C, sigma=self.gamma, seed=seeds[i]) for i in range(self.workers))
 
@@ -428,7 +450,7 @@ class DSEKLBATCH(BaseEstimator, ClassifierMixin):
                     else:
                         w[i] -= self.eta * tmpw[i] /float(len(gradients))#/ sp.sqrt(G[i])
 
-            self.eta = self.eta * self.eta_start
+            self.eta = self.eta/float(it)#self.eta * self.eta_start
             self.w = w.copy()
             delta_w = sp.linalg.norm(oldw - w)
         self.w = w.copy()
@@ -447,6 +469,42 @@ class DSEKLBATCH(BaseEstimator, ClassifierMixin):
         yhat = sp.sign(sp.vstack(yraw).mean(axis=0))
         return yhat
 
+
+
+
+
+    # '''
+    # predict in batches
+    # '''
+    # def predict(self, Xtest):
+    #
+    #     print "starting predict with:",Xtest.shape[0]," samples : ",datetime.datetime.now()
+    #     num_batches = Xtest.shape[0] / float(self.n_pred_samples)
+    #
+    #     test_ids = []
+    #
+    #     for i in range(0, int(num_batches)):
+    #         test_ids.append(range((i) * self.n_pred_samples, (i + 1) * self.n_pred_samples))
+    #
+    #     if (num_batches - int(num_batches)) > 0:
+    #         test_ids.append(range(int(num_batches) * self.n_pred_samples, Xtest.shape[0]))
+    #
+    #     # values = [(test_id, exp_ids) for test_id in test_ids for exp_ids in self.X_exp_ids]
+    #     yhattotal = []
+    #
+    #
+    #     yhattotal = Parallel(n_jobs=self.workers)(delayed(predict_helper)(self.X,Xtest[test_ids[i]],self.w, self.X_exp_ids,self.gamma) for i in range(len(test_ids)))
+    #     # for i in range(0,len(test_ids)):
+    #     #     # print "computing result with batches:",i," of:",len(test_ids)
+    #     #     yraw = Parallel(n_jobs=self.workers)(delayed(svm_predict_raw_batches)(self.X, Xtest[test_ids[i]], \
+    #     #                                                    self.w, v, self.gamma) for v in self.X_exp_ids)
+    #     #     yhat = sp.sign(sp.vstack(yraw).mean(axis=0))
+    #     #     yhattotal.append(yhat)
+    #
+    #     yhattotal = [item for sublist in yhattotal for item in sublist]
+    #     print "stopping predict:", datetime.datetime.now()
+    #     return yhattotal
+    #
     '''
     predict in batches
     '''
@@ -467,7 +525,7 @@ class DSEKLBATCH(BaseEstimator, ClassifierMixin):
         yhattotal = []
         for i in range(0,len(test_ids)):
             # print "computing result with batches:",i," of:",len(test_ids)
-            yraw = Parallel(n_jobs=8)(delayed(svm_predict_raw_batches)(self.X, Xtest[test_ids[i]], \
+            yraw = Parallel(n_jobs=self.workers)(delayed(svm_predict_raw_batches)(self.X, Xtest[test_ids[i]], \
                                                            self.w, v, self.gamma) for v in self.X_exp_ids)
             yhat = sp.sign(sp.vstack(yraw).mean(axis=0))
             yhattotal.append(yhat)
@@ -547,4 +605,13 @@ class DSEKLBATCH(BaseEstimator, ClassifierMixin):
         K = GaussKernMini(Xtest.T, self.X.T, self.gamma)
         return K.dot(self.w)
 
-    def transform(self, Xtest): return self.predict(Xtest)#self.predict_all_subsample(Xtest)#self.predict(Xtest)#svm_predict_all(self.X,Xtest,self.w,self.gamma)#
+    def transform(self, Xtest): return self.predict(Xtest)
+    #self.predict_all_subsample(Xtest)#self.predict(Xtest)#svm_predict_all(self.X,Xtest,self.w,self.gamma)#
+
+# self.X,Xtest[test_ids[i]],self.w, self.X_exp_ids,self.gamma) for i in range(len(test_ids)))
+def predict_helper(X,Xtest,w,X_exp_ids,gamma):
+    yraws = []
+    for v in X_exp_ids:
+        yraw = svm_predict_raw_batches(X,Xtest,w, v, gamma)
+        yraws.append(yraw)
+    return sp.sign(sp.vstack(yraw).mean(axis=0))

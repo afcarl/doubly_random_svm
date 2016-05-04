@@ -15,11 +15,11 @@ from sklearn.preprocessing import StandardScaler
 
 custom_data_home = "/home/nikste/workspace-python/doubly_random_svm/"
 if not os.path.isdir(custom_data_home):
-    custom_data_home = "/home/mkaul/doubly_random_svm/"
+    custom_data_home = "/data/users/nsteenbergen/"
 
 mnist8mfn = "/home/nikste/workspace-python/doubly_random_svm/svmlightdata/infimnist/"
 if not os.path.isdir(mnist8mfn):
-    mnist8mfn = "/home/mkaul/doubly_random_svm/svmlightdata/infimnist/"
+    mnist8mfn = "/data/users/nsteenbergen/svmlightdata/infimnist/"
 
 def load_clf(fname):
     f = file(fname,"rb")
