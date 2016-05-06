@@ -2,6 +2,7 @@ import datetime
 import pickle
 
 import scipy as sp
+import numpy as np
 from scipy.sparse import csr_matrix
 
 from sklearn import svm
@@ -52,8 +53,8 @@ def run_realdata_no_comparison(dname='sonar', n_its=1000, num_test=1000, worker=
 
     print "densifying", datetime.datetime.now()
     # unit variance and zero mean
-    # Xtrain = Xtrain.todense()
-    # Xtest = Xtest.todense()
+    Xtrain = Xtrain.todense()
+    Xtest = Xtest.todense()
 
     if not sp.sparse.issparse(Xtrain):
         scaler = StandardScaler()
@@ -68,6 +69,7 @@ def run_realdata_no_comparison(dname='sonar', n_its=1000, num_test=1000, worker=
         scaler.fit(Xtrain)
         Xtrain = scaler.transform(Xtrain)
         Xtest = scaler.transform(Xtest)
+
 
     '''
     sonar:
@@ -89,9 +91,6 @@ def run_realdata_no_comparison(dname='sonar', n_its=1000, num_test=1000, worker=
     DS = DSEKLBATCH(n_pred_samples=10000,n_expand_samples=10000,eta=0.999,n_its=n_its,C=1./float(N),gamma=1.0,damp=True,workers=worker,validation=True,verbose=True).fit(Xtrain,Ytrain)
     pickle.dump(DS,file("DSBatch_nodense","wb"),pickle.HIGHEST_PROTOCOL)
 
-    # svm = svm.SVC(n_its=n_its,C=9.9999999999999995e-07,gamma=1.0)
-    # print "test result all:", sp.mean(sp.sign(DS.predict_all(Xtest))!=Ytest)
-    # print "smart subsample:", sp.mean(sp.sign(DS.predict_support(Xtest))!=Ytest)
     print "test result subsample:", sp.mean(sp.sign(DS.predict(Xtest))!=Ytest)
 
 def dsekl_test_predict(dname='sonar', num_test=1000, maxN=1000):
@@ -151,22 +150,6 @@ def dsekl_test_predict(dname='sonar', num_test=1000, maxN=1000):
     print "res_perc",res_perc
 
 
-    # res_1000 = DS.predict(Xtest,number_of_redraws=1000)
-    # res_1000 = sp.mean(sp.sign(res_1000) != Ytest)
-    # print "res_1000",res_1000
-    # res_100 = DS.predict(Xtest,number_of_redraws=100)
-    # res_100 = sp.mean(sp.sign(res_100) != Ytest)
-    # print "res_100",res_100
-    # res_10 = DS.predict(Xtest,number_of_redraws=10)
-    # res_10 = sp.mean(sp.sign(res_10) != Ytest)
-    # print "res_10",res_10
-    # res_1 = DS.predict(Xtest,number_of_redraws=1)
-    # res_1 = sp.mean(sp.sign(res_1) != Ytest)
-    # print "res_1",res_1
-    # res_all = DS.predict_all(Xtest)
-    # res_all = sp.mean(sp.sign(res_all) != Ytest)
-    # print "res_all",res_all
-
 
 
 def hyperparameter_search_dskl(reps=2,dname='sonar',maxN=1000,num_test=10000):
@@ -184,12 +167,7 @@ def hyperparameter_search_dskl(reps=2,dname='sonar',maxN=1000,num_test=10000):
         'eta': [0.999],
         'C': 10. ** sp.arange(-18., 14., 2.),
         'gamma': 10. ** sp.arange(-4., 4., 2.),
-        #'C': 10.  **sp.arange(-64.,10.,10),
-        #'gamma': 10. **sp.arange(-1.,2.,.5),
         'workers': [48],
-        #'validation': [False],
-        #'damp:': [True,False]#,
-        #'verbose': [False]#,
     }
 
     print "checking parameters:\n",params_dksl
@@ -293,10 +271,14 @@ def run_realdata(reps=2,dname='sonar',maxN=1000):
 
 
 if __name__ == '__main__':
+    '''
+    IMPORTANT if does not use all cores try start with:
+    Shell> OPENBLAS_MAIN_FREE=1 python myscript.py
+    '''
     # dsekl_test_predict(dname='covertype',maxN=1000,num_test=10000)
     # run_realdata(reps=10, dname='covertype', maxN=2000)
-    hyperparameter_search_dskl(reps=2,dname="covertype",maxN=100000,num_test=1000)
+    # hyperparameter_search_dskl(reps=2,dname="covertype",maxN=100000,num_test=1000)
 
     # run_realdata_no_comparison(dname='covertype',n_its=20000,worker=48,maxN=-1,num_test=10000)
-    # run_realdata_no_comparison(dname='covertype',n_its=1000,worker=8,maxN=10000,num_test=20000)
+    run_realdata_no_comparison(dname='covertype',n_its=10000,worker=-1,maxN=-1,num_test=20000)
 
