@@ -161,8 +161,8 @@ def hyperparameter_search_dskl(reps=2,dname='sonar',maxN=1000,num_test=10000):
         N = Xtotal.shape[0]
 
     params_dksl = {
-        'n_pred_samples': [15000],#[int(N/2*0.01)],#,int(N/2*0.02),int(N/2*0.03)],
-        'n_expand_samples': [15000],#[int(N/2*0.01)],#,int(N/2*0.02),int(N/2*0.03)],
+        'n_pred_samples': [1000],#[int(N/2*0.01)],#,int(N/2*0.02),int(N/2*0.03)],
+        'n_expand_samples': [1000],#[int(N/2*0.01)],#,int(N/2*0.02),int(N/2*0.03)],
         'n_its': [10000],
         'eta': [0.999],
         'C': 10. ** sp.arange(-18., 14., 2.),
@@ -197,7 +197,7 @@ def hyperparameter_search_dskl(reps=2,dname='sonar',maxN=1000,num_test=10000):
             Xtest = scaler.transform(Xtest)
         print "Training empirical"
         # clf = GridSearchCV(DSEKL(),params_dksl,n_jobs=-1,verbose=1,cv=2).fit(Xtrain,Ytrain)
-        clf = GridSearchCV(DSEKLBATCH(),params_dksl,n_jobs=-1,verbose=1,cv=10).fit(Xtrain,Ytrain)
+        clf = GridSearchCV(DSEKLBATCH(),params_dksl,n_jobs=-1,verbose=1,cv=2).fit(Xtrain,Ytrain)
         Eemp.append(sp.mean(sp.sign(clf.best_estimator_.transform(Xtest))!=Ytest))
         print "Emp: %0.2f"%(Eemp[-1])
         print clf.best_estimator_.get_params()
@@ -273,11 +273,11 @@ def run_realdata(reps=2,dname='sonar',maxN=1000):
 if __name__ == '__main__':
     '''
     IMPORTANT if does not use all cores try start with:
-    Shell> OPENBLAS_MAIN_FREE=1 python myscript.py
+    Shell>OPENBLAS_MAIN_FREE=1 python myscript.py
     '''
     # dsekl_test_predict(dname='covertype',maxN=1000,num_test=10000)
     # run_realdata(reps=10, dname='covertype', maxN=2000)
-    # hyperparameter_search_dskl(reps=2,dname="covertype",maxN=100000,num_test=1000)
+    hyperparameter_search_dskl(reps=2,dname="mnist8m",maxN=10000,num_test=1000)
 
     # run_realdata_no_comparison(dname='covertype',n_its=20000,worker=48,maxN=-1,num_test=10000)
     run_realdata_no_comparison(dname='covertype',n_its=10000,worker=-1,maxN=-1,num_test=20000)

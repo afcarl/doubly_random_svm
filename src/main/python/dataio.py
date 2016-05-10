@@ -21,6 +21,14 @@ mnist8mfn = "/home/nikste/workspace-python/doubly_random_svm/svmlightdata/infimn
 if not os.path.isdir(mnist8mfn):
     mnist8mfn = "/data/users/nsteenbergen/svmlightdata/infimnist/"
 
+
+base_folder_mnist = "/data/users/nsteenbergen/infimnist/infimnist/mnist8m/"
+if not os.path.isdir(base_folder_mnist):
+    base_folder_mnist = "/home/nsteenbergen/data/mnist8m/"
+
+
+if not os.path.isdir(base_folder_mnist):
+    base_folder_mnist = "/home/nsteenbergen/data/"
 def load_clf(fname):
     f = file(fname,"rb")
     return np.pickle.load(f)
@@ -92,11 +100,20 @@ def load_realdata(dname="mushrooms"):
         Ytotal = sp.sign(Ytotal - 1.5)
     elif dname == 'madelon':
         Xtotal,Ytotal = get_svmlight_file("madelon")
+    elif dname == 'mnist8m':
+        dd_train,dd_test = load_mnist8m()
+        Xtotal = dd_train[0]
+        Ytotal = dd_train[1]
+        Xtest = dd_test[0]
+        Ytest = dd_test[1]
     return Xtotal,Ytotal
 
 
 
-def load_mnist8m(binary_classification = True):
+
+
+
+def load_mnist8m_old(binary_classification = True):
     from sklearn.datasets import load_svmlight_file
     from sklearn.externals import joblib
 
@@ -139,13 +156,79 @@ def load_mnist8m(binary_classification = True):
 
 
 
+def scale_mnist8m():
+    from sklearn.datasets import load_svmlight_file
+
+
+    print "loading train",datetime.datetime.now()
+    dd_train = load_svmlight_file(base_folder_mnist + "mnist8m_6_8_train.libsvm")
+    print "loading test", datetime.datetime.now()
+    dd_test = load_svmlight_file(base_folder_mnist + "mnist8m_6_8_test.libsvm")
+
+    Xtrain = dd_train[0]
+    Xtest = dd_test[0]
+    Ytrain = dd_train[1]
+    Ytest = dd_test[1]
+
+    Xtrain = csr_matrix((Xtrain.data, Xtrain.indices, Xtrain.indptr), shape=(Xtrain.shape[0], 786))
+    Xtest = csr_matrix((Xtest.data, Xtest.indices, Xtest.indptr), shape=(Xtest.shape[0], 786))
+    from sklearn.externals import joblib
+
+
+    print "densifying train",datetime.datetime.now()
+    Xtrain = Xtrain.todense()
+    print "densifying test",datetime.datetime.now()
+    Xtest = Xtest.todense()
+
+    print "dumping train",datetime.datetime.now()
+    joblib.dump((np.asarray(Xtrain),Ytrain),base_folder_mnist + "mnist8m_6_8_train_reshaped")
+    #joblib.load(base_folder + "mnist8m_6_8_train_touple_small")
+    print "dumping test",datetime.datetime.now()
+    joblib.dump((np.asarray(Xtest),Ytest),base_folder_mnist + "mnist8m_6_8_test_reshaped")
+    print "finished",datetime.datetime.now()
+
+
+def load_mnist8m():
+    from sklearn.externals import joblib
+
+    print "load mnist8m train",datetime.datetime.now()
+    dd_train = joblib.load(base_folder_mnist + "mnist8m_6_8_train_scaled")
+    print "load mnist8m test",datetime.datetime.now()
+    dd_test = joblib.load(base_folder_mnist + "mnist8m_6_8_test_scaled")
+    print "finished",datetime.datetime.now()
+    return dd_train,dd_test
+    # from sklearn.decomposition import PCA
+    # pca = PCA(n_components=50)
+    #
+    # pca.fit(Xtrain)
+    # Xtrain = pca.transform(Xtrain)
+    # Xtest = pca.transform(Xtest)
+    #
+    # print "Xtrain"
+    # print Xtrain
+    #
+    # print "Xtest"
+    # print Xtest
+
+def pca_mnist():
+    from sklearn.decomposition import PCA
+    pca = PCA(n_components=50)
+    dd_train,dd_test = load_mnist8m()
+    Xtrain = dd_train[0]
+    Xtest = dd_test[0]
+    Ytrain = dd_train[1]
+    Ytest = dd_test[1]
+
+
+
+
 def preprocess_mnist8m():
     from sklearn.datasets import load_svmlight_file
     from sklearn.externals import joblib
     # preprocessing
     from sklearn.datasets import load_svmlight_file
-    one_two_mnist8m_fn_train = "/home/nikste/workspace-python/doubly_random_svm_exp/svmlightdata/infimnist/" + "mnist8m/" + "mnist8m-libsvm_6_8.txt"   # "mnist8m-libsvm_0_1_small.txt"
-    one_two_mnist8m_fn_test = "/home/nikste/workspace-python/doubly_random_svm_exp/svmlightdata/infimnist/" + "mnist8m/" + "mnist8m-libsvm_6_8-test.txt"  # "mnist8m-libsvm_0_1-test_small.txt"
+    one_two_mnist8m_fn_train = "/home/nikste/workspace-python/doubly_random_svm/svmlightdata/infimnist/" + "mnist8m/" + "mnist8m-libsvm_6_8.txt"   # "mnist8m-libsvm_0_1_small.txt"
+    one_two_mnist8m_fn_test = "/home/nikste/workspace-python/doubly_random_svm/svmlightdata/infimnist/" + "mnist8m/" + "mnist8m-libsvm_6_8-test.txt"  # "mnist8m-libsvm_0_1-test_small.txt"
 
     if not os.path.isfile(one_two_mnist8m_fn_train):
         raise ValueError("mnist8m train data not found in:" + one_two_mnist8m_fn_train)
@@ -171,7 +254,7 @@ def preprocess_mnist8m():
 
 
     print "saving to file:",datetime.datetime.now()
-    mnist8mfn = "/home/nikste/workspace-python/doubly_random_svm_exp/svmlightdata/infimnist/mnist8m/"
+    mnist8mfn = "/home/nikste/workspace-python/doubly_random_svm/svmlightdata/infimnist/mnist8m/"
 
 
     joblib.dump((Xtrain, Ytrain), mnist8mfn  + "mnist8m-libsvm_6_8_scaled.txt.dump", cache_size=200, protocol=2)
