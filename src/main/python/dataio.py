@@ -24,11 +24,10 @@ if not os.path.isdir(mnist8mfn):
 
 base_folder_mnist = "/data/users/nsteenbergen/infimnist/infimnist/mnist8m/"
 if not os.path.isdir(base_folder_mnist):
-    base_folder_mnist = "/home/nsteenbergen/data/mnist8m/"
-
-
+    base_folder_mnist = "/data/users/nsteenbergen/data/mnist8m/"
 if not os.path.isdir(base_folder_mnist):
-    base_folder_mnist = "/home/nsteenbergen/data/"
+    base_folder_mnist = "/home/nikste/workspace-python/doubly_random_svm/data/mnist8m/"
+
 def load_clf(fname):
     f = file(fname,"rb")
     return np.pickle.load(f)
@@ -102,6 +101,12 @@ def load_realdata(dname="mushrooms"):
         Xtotal,Ytotal = get_svmlight_file("madelon")
     elif dname == 'mnist8m':
         dd_train,dd_test = load_mnist8m()
+        Xtotal = dd_train[0]
+        Ytotal = dd_train[1]
+        Xtest = dd_test[0]
+        Ytest = dd_test[1]
+    elif dname == 'mnist8m_crossvalidation':
+        dd_train,dd_test = load_mnist_10000()
         Xtotal = dd_train[0]
         Ytotal = dd_train[1]
         Xtest = dd_test[0]
@@ -187,7 +192,15 @@ def scale_mnist8m():
     joblib.dump((np.asarray(Xtest),Ytest),base_folder_mnist + "mnist8m_6_8_test_reshaped")
     print "finished",datetime.datetime.now()
 
+def load_mnist_10000():
+    from sklearn.externals import joblib
 
+    print "load mnist8m train", datetime.datetime.now()
+    dd_train = joblib.load(base_folder_mnist + "mnist8m_6_8_train_scaled_10000")
+    print "load mnist8m test", datetime.datetime.now()
+    dd_test = joblib.load(base_folder_mnist + "mnist8m_6_8_test_scaled")
+    print "finished", datetime.datetime.now()
+    return dd_train, dd_test
 def load_mnist8m():
     from sklearn.externals import joblib
 

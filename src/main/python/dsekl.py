@@ -328,7 +328,7 @@ class DSEKLBATCH(BaseEstimator, ClassifierMixin):
     """
     Doubly Stochastic Empirical Kernel Learning (for now only with SVM and RBF kernel)
     """
-    def __init__(self,n_expand_samples=100,n_pred_samples=100,n_its=100,eta=1.,C=.001,gamma=1.,workers=1,damp=True,validation=False,verbose=False):
+    def __init__(self,n_expand_samples=100,n_pred_samples=100,n_its=100,eta=1.,C=.001,gamma=1.,workers=1,damp=True,validation=False,verbose=False, benefit_through_distribution_no_workers = -1):
         self.n_expand_samples=n_expand_samples
         self.n_pred_samples=n_pred_samples
         self.n_its = n_its
@@ -340,6 +340,7 @@ class DSEKLBATCH(BaseEstimator, ClassifierMixin):
         self.verbose = verbose
         self.damp = damp
         self.validation = validation
+        self.benefit_through_distribution_no_workers = benefit_through_distribution_no_workers
         pass
 
     def fit(self, X, y):
@@ -385,7 +386,7 @@ class DSEKLBATCH(BaseEstimator, ClassifierMixin):
             else:
                 print "Training DSEKL on %d samples" % (len(idx))
 
-            print "\nhyperparameters:\nn_expand_samples: ",self.n_expand_samples,"\nn_pred_samples: ",self.n_pred_samples,"\neta: ",self.eta_start,"\nC: ",self.C,"\ngamma: ",self.gamma,"\nworker: ",self.workers,"\ndamp: ",self.damp,"\nvalidation: ",self.validation,"\n"
+            print "\nhyperparameters:\nn_expand_samples: ",self.n_expand_samples,"\nn_pred_samples: ",self.n_pred_samples,"\neta: ",self.eta_start,"\nC: ",self.C,"\ngamma: ",self.gamma,"\nworker: ",self.workers,"\ndamp: ",self.damp,"\nvalidation: ",self.validation,"\nbenefit_through_distribution_num_workers:",self.benefit_through_distribution_no_workers,"\n"
 
         self.classes_ = sp.unique(y)
         assert(all(self.classes_==[-1.,1.]))
@@ -401,6 +402,9 @@ class DSEKLBATCH(BaseEstimator, ClassifierMixin):
         oldw = w.copy()
         it = 0
         delta_w = 50
+        if (self.benefit_through_distribution_no_workers != -1):
+            t_start = datetime.datetime.now()
+            print "iterations start:",t_start
         while ( it < self.n_its and delta_w > 1.):
             it += 1
 
@@ -429,12 +433,23 @@ class DSEKLBATCH(BaseEstimator, ClassifierMixin):
 
             # print "X_pred_ids:\n",self.X_pred_ids
             for i in range(0,len(self.X_pred_ids)):
+
+
                 X_pred_id = self.X_pred_ids[i]
                 if self.verbose:
                     print "training on batch:",i, " of ",len(self.X_pred_ids), datetime.datetime.now()
-
-                gradients = Parallel(n_jobs=self.workers,max_nbytes=None,verbose=50) (delayed(svm_gradient_batch_fast)(self.X[X_pred_id,:], self.X[X_exp_id],self.y,X_pred_id, X_exp_id,w.copy(), C=self.C, sigma=self.gamma) for X_exp_id in self.X_exp_ids)
-
+                if self.benefit_through_distribution_no_workers == -1:
+                    gradients = Parallel(n_jobs=self.workers,max_nbytes=None,verbose=0) (delayed(svm_gradient_batch_fast)(self.X[X_pred_id,:], self.X[X_exp_id],self.y,X_pred_id, X_exp_id,w.copy(), C=self.C, sigma=self.gamma) for X_exp_id in self.X_exp_ids)
+                else:
+                    #gradients = Parallel(n_jobs=self.benefit_through_distribution_no_workers,batch_size=self.benefit_through_distribution_no_workers,pre_dispatch=self.benefit_through_distribution_no_workers,max_nbytes=None,verbose=1) (delayed(svm_gradient_batch_fast)(self.X[X_pred_id,:], self.X[X_exp_id],self.y,X_pred_id, X_exp_id,w.copy(), C=self.C, sigma=self.gamma) for X_exp_id in self.X_exp_ids)
+                    gradients = Parallel(n_jobs=self.benefit_through_distribution_no_workers,
+                                         #pre_dispatch=self.benefit_through_distribution_no_workers,
+                                         #batch_size=self.benefit_through_distribution_no_workers,
+                                         max_nbytes=None,
+                                         verbose=1) (delayed(svm_gradient_batch_fast)(self.X[X_pred_id,:], self.X[X_exp_id],self.y,X_pred_id, X_exp_id,w.copy(), C=self.C, sigma=self.gamma) for X_exp_id in self.X_exp_ids)
+                print "iterations took in total:", datetime.datetime.now() - t_start
+                if (self.benefit_through_distribution_no_workers != -1):
+                    break
                 tmpw = sp.zeros(len(y))
                 for g in gradients:
                     if self.damp:
@@ -450,6 +465,7 @@ class DSEKLBATCH(BaseEstimator, ClassifierMixin):
             self.eta = 1./float(it)#self.eta * self.eta_start
             self.w = w
             delta_w = sp.linalg.norm(oldw - w)
+
         self.w = w.copy()
         return self
 
@@ -493,7 +509,7 @@ class DSEKLBATCH(BaseEstimator, ClassifierMixin):
 
         yhattotal = [item for sublist in yhattotal for item in sublist]
         print "stopping predict:", datetime.datetime.now()
-        return yhattotal
+        return sp.sign(yhattotal)
 
     '''
     try to evaluate on all points
