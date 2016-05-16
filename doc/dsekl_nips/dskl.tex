@@ -89,7 +89,7 @@ TU Berlin, Berlin, Germany\\
 \maketitle
 
 \begin{abstract} 
-With the rise of big data sets the popularity of kernel methods declined and deep neural network (DNNs) took over again. Most attempts to scale up kernel methods  solve the problem by simply discarding data points (or basis functions of some approximation of the kernel function). Also in many of these approaches, the main advantage of kernel methods -- modularity w.r.t. powerful kernel functions and learning methods -- is somewhat obfuscated by a significant amount of complexity of the theory or implementation details. Here we present a remarkably simple yet effective way of scaling up kernel methods via doubly stochastic optimization of the emprical kernel map, which -- to the best of our knowledge -- has not been applied to the distributed setting. We build our work on a large body of existing theoretical work on kernel machines and provide empirical evidence that the algorithm a) works in practice on large data sets b) can leverage the full power and versatility of classical kernel machines and c) is extremely simple to implement, also in distributed settings. 
+With the rise of big data sets the popularity of kernel methods declined and deep neural network (DNNs) took over again. Most attempts to scale up kernel methods  solve the problem by simply discarding data points (or basis functions of some approximation of the kernel function). Also in many of these approaches, the main advantage of kernel methods -- modularity w.r.t. powerful kernel functions and learning methods -- is somewhat obfuscated by a significant amount of complexity of the theory or implementation details. Here we present a remarkably simple yet effective way of scaling up kernel methods via doubly stochastic optimization of the emprical kernel map, which -- to the best of our knowledge -- has not been applied to the distributed setting. We build our work on a large body of existing theoretical work on kernel machines and provide empirical evidence that the algorithm a) works in practice on large data sets b) can leverage the full power and versatility of classical kernel machines and c) is extremely simple to implement, especially in settings using parallel execution. 
 \end{abstract} 
 
 
@@ -205,13 +205,13 @@ Note that in contrast to many other kernel approximations the memory footprint o
 The learning rate parameter here is simply set to $1/t$ where $t$ is the number of iterations. It is good practice to adjust that parameter according to some more sophisticated schedule. Moreover, as the method is perfoming stochastic gradient descent on the dual coefficients of the kernel map, all standard methods to speed up convergence can in principle be applied. Also special care has to be taken when running the algorithm in a distributed fashion. However we emphasize that the complexity of the implementation remains essentially the same when running this algorithm on distributed infrastructure, as explained in more detail in \autoref{sec:distributed}.
 %
 \section{Experiments}
-This experimental section will describe some experiments on artificially generated toy data and on publicly available real-world data sets. All experiments will use a support-vector machine with RBF kernel, for the sake of comparability. We performed experiments on a single host as well as on distributed infrastructure. Most comparisons with other algorithms, in particular with batch SVMs, were done on a single host. We used the batch SVM implementation available in scikit learn \cite{sklearn_api}. For all models we tunes hyperparameters with two-fold cross-validation and exhaustive gridsearch; reported accuracies were computed on a held out test set of the same size as the training set. For batch and SGD algorithms the hyperparameters were the regularization parameter and RBF scale, both were optimized on a logarithmic grid from $10^{-6}-10^6$; additional parameters for the SGD approaches were the stepsize (candidates were $10^{-4}-10^4$), the minibatch size for computing the gradient $I$ and for doubly stochastic kernel learning and for random fourier features also the number of kernel expansion coefficients $J$ or random fourier features, respectively. Both were set to 100, sampling of $\mathcal{I,J}$ was done with replacement and we ran 100 gradient steps for all algorithms trained with SGD. More iterations improved the results in the cases we tested, but as the gridsearch was time consuming and the point of the comparisons is that the proposed method achieves comparable performance, we decided to use only 100 iterations. 
+This experimental section describes experiments on artificially generated toy data and on publicly available real-world data sets. All experiments use a support-vector machine with RBF kernel, for the sake of comparability. We performed experiments on a single machine using serial execution as well as with a parallel shared-memory variant of our approach. We used the batch SVM implementation available in scikit~learn~\cite{sklearn_api}. We tuned hyperparameters with two-fold cross-validation and exhaustive gridsearch for all models; the reported accuracies have been computed on a held out test set of the same size as the training set.We optimized the hyperparameters for batch and SGD algorithms (the regularization parameter and RBF scale) on a logarithmic grid from $10^{-6}-10^6$; The SGD approaches have additional parameters such as the stepsize (candidates were $10^{-4}-10^4$), the minibatch size for computing the gradient $I$. For doubly stochastic kernel learning and for random fourier features the number of kernel expansion coefficients $J$ or random fourier features, respectively form hyperparameters. Both were set to 100, and we conducted sampling of $\mathcal{I,J}$ with replacement and ran 100 gradient steps for all algorithms trained with SGD. More iterations improved the results in the cases which we tested, but we decided to use only 100 iterations, as the gridsearch was very time consuming and the point of the comparisons is that the proposed method achieves comparable performance. 
 
 \subsection{Comparisons with related methods}
-We compared the proposed method with other kernel approximations as well as with batch kernel SVMs . Comparisons were done with random kitchen sinks (RKS) where the number of basis functions matches the number of expansion coefficients $J$. In order to compare with standard large-scale kernel approximations that use only a subset of data points we also compare with a version in which we first draw one random sample from the data and train the algorithm with that subset only. While most of these methods that use just a subset of the data use much more sophisticated schemes for selecting that subset and smarter ways of extrapolating, we wanted to focus on the main differences here, which is training on a fix random subset of the data. 
+We compared the proposed method with other kernel approximations as well as with batch kernel SVMs. We conducted comparisons with random kitchen sinks (RKS) where the number of basis functions matched the number of expansion coefficients $J$. In order to assess standard large-scale kernel approximations that only use a subset of data points, we also compared with a version in which we first draw one random sample from the data, and then train the algorithm with that subset only. While most of these methods that use just a subset of the data use much more sophisticated schemes for selecting that subset and smarter ways of extrapolating, we wanted to focus on the main differences here, which is training on a fix random subset of the data. 
 
-\subsection{Single host experiments}\label{sec:single_host}
-We generated toy data from an XOR problem as shown in \autoref{fig:toy_data}. Data from one class (yellow dots) is drawn from a spherical gaussian distribution $\mathcal{N}(0,0.2)$ around $[1,1]^\top$ and $[-1,-1]^\top$ and data points from the other class (red dots) were drawn from the same gaussian distribution centered around $[1,-1]^\top$ and $[-1,1]^\top$. 
+\subsection{Serial Execution}\label{sec:single_host}
+We generated toy data from an XOR problem as shown in \autoref{fig:toy_data}. We draw data for one class (yellow dots) from a spherical gaussian distribution $\mathcal{N}(0,0.2)$ around $[1,1]^\top$ and $[-1,-1]^\top$, and we draw data points from the other class (red dots) from the same gaussian distribution centered around $[1,-1]^\top$ and $[-1,1]^\top$. 
 %
 \begin{figure}[!ht]
     \centering
@@ -222,7 +222,7 @@ We generated toy data from an XOR problem as shown in \autoref{fig:toy_data}. Da
 \end{figure}
 %
 \autoref{fig:toydata_comparisons} shows comparisons of the proposed method with other, related approaches, as well as with a batch setting. 
-The error on the test set when varying $I$, the number of samples for computing the gradient, is plotted in \autoref{fig:expand_20_pred_1} and \autoref{fig:expand_20_pred_50}. The error when varying $J$, the number of expansion coefficients is shown in \autoref{fig:pred_20_expand_1} \autoref{fig:pred_20_expand_50}. Note that with too few data points for computing the gradient or the expansion, both random kitchen sinks as well as a fix sample of data points have an advantage over the doubly stochastic approach. When as the number of data points in the gradient computation and the kernel map expansion increases however, doubly stochastic kernel learning achieves performances comparable to batch methods (indicated as dotted line).
+We plot the error on the test set when varying $I$, the number of samples for computing the gradient, in \autoref{fig:expand_20_pred_1} and \autoref{fig:expand_20_pred_50}. \autoref{fig:pred_20_expand_1} and \autoref{fig:pred_20_expand_50} show the error when varying $J$, the number of expansion coefficients. Note that with too few data points for computing the gradient or the expansion, both random kitchen sinks as well as a fixed sample of data points have an advantage over the doubly stochastic approach. As the number of data points in the gradient computation and the kernel map expansion increases however, doubly stochastic kernel learning achieves performances comparable to batch methods (indicated as dotted line).
 %
 \begin{figure}[!ht]
    \centering
@@ -252,7 +252,7 @@ The error on the test set when varying $I$, the number of samples for computing 
     \label{fig:toydata_comparisons}
 \end{figure}
 %
-We performed experiments on a number of standard benchmark real world data sets available on the libsvm homepage\footnote{\url{https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/binary.html}}. In order to be able to run the batch comparisons, these comparisons are run on a single host and small data sets. Large scale experiments are discussed in \autoref{sec:distributed}. For all experiments we sampled $\min(1000,N_{\text{dataset}})$ data points where $N_{\text{dataset}}$ is the number of data points in that data set and took half the data for training and half the data for testing, including hyperparameter optimization on the training set. We ran 10 repetitions of each experiment and show the test set error in \autoref{tab:small_realdata}. In all data sets we have looked at, the proposed doubly stochastic empirical kernel learning approach achieves errors comparable to that of a batch SVM. In some cases the batch SVM achieves perfect accuracy and DSEKL still results in a few errors, we emphasize however that these comparisons are done to show that DSEKL can achieve performances comparable with batch methods. Refining the SGD optimization or running more iterations would have probably further improved the performance. We did not do that as we merely wanted to show a proof of concept. Also note that the proposed DSEKL approach uses only a fraction of the data in each step. This allows training on much larger data sets, which will be discussed in the next section.
+We performed experiments on a number of standard benchmark real world data sets available on the libsvm homepage\footnote{\url{https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/binary.html}}. We compare to the batch version using serial execution and small data sets. We discuss experiments on larger datasets, leveraging our parallel variant in \autoref{sec:distributed}. For all experiments we sampled $\min(1000,N_{\text{dataset}})$ data points where $N_{\text{dataset}}$ is the number of data points in that data set, and took half the data for training and half the data for testing, including hyperparameter optimization on the training set. We ran 10 repetitions of each experiment and show the test set error in \autoref{tab:small_realdata}. In all the data sets which we investigated, the proposed doubly stochastic empirical kernel learning approach achieves errors comparable to that of a batch SVM. In cases where the batch SVM achieves perfect accuracy and DSEKL still results in a few errors, we emphasize that these comparisons are conducted to show that DSEKL can achieve performances comparable with batch methods. Refining the SGD optimization or running more iterations can further improve the performance, yet our main intention is to provide a proof of concept for the doubly stochastic approach. Also note that the proposed DSEKL approach uses only a fraction of the data in each step. This allows for training on much larger data sets, which we discuss in the next section.
 %
 \begin{table}
 \begin{center}
@@ -272,50 +272,79 @@ Madelon & 0.03$\pm$0.01 &  0.00$\pm$0.00\\
 \end{center}
 \end{table}
 %
-\subsection{Distributed infrastructure}\label{sec:distributed}
-This section describes the experiments performed on distributed infrastructure. We list the pseudocode in algorithm\autoref{alg:dskl_svm_distributed}. The only difference to algorithm \autoref{alg:dskl} is that the data is distributed to multiple workers in a cluster and the learning happens in parallel. We use sampling with replacement to re-partition the data onto the different workers. Partition sizes can be chosen flexibly which ensures that we have redundancy in the data partitions, i.e. one data point can be on multiple machines. This allows the algorithm to access more than just the block-diagonal parts of the full kernel matrix, as opposed to approaches such as \cite{Deisenroth2015}. 
+ \subsection{Parallel Execution using a Shared-Memory abstraction}\label{sec:distributed}
+This section describes the experiments performed using a parallel, shared-memory variant of our approach. We list the pseudocode in algorithm\autoref{alg:dskl_svm_distributed}. The difference to algorithm \autoref{alg:dskl} is that we run multiple workers at the same time and process multiple samples for the empirical kernel map per iteration to make the learning happen in parallel. We use sampling without replacement to partition the data for the different workers. 
 
-As a real-world data set we use a larger version of the MNIST data set, see e.g. \url{http://leon.bottou.org/projects/infimnist}, for the sake of easier comparison with other studies \cite{Lu2014, Dai2014}.
+ \begin{algorithm}
+   \begin{algorithmic}[1]
+     \caption{Parallel Shared-Memory Non-Linear Support-Vector Machine\label{alg:dskl_svm_distributed}}
+       \REQUIRE sample size $s$, number of workers $K$
+       \STATE \# Initialize coefficients $\va$
+       \STATE \# Sample indices $\mathcal{I}^{(0)},\dots,\mathcal{I}^{(K)}$ for gradient 
+       \STATE \# Sample indices $\mathcal{J}^{(0)},\dots,\mathcal{J}^{(K)}$ for empirical kernel map 
+       \STATE $\vec{G} \leftarrow \mathbb{I}$
+       \WHILE{Not Converged}
+         \FORALL{samples $\mathcal{I}^{(0)},\dots,\mathcal{I}^{(K)}$}      
+           \FORALL{samples $\mathcal{J}^{(0)},\dots,\mathcal{J}^{(K)}$ in parallel on worker $k$} 
+             \STATE \# Compute gradients as in Algorithm~\autoref{alg:dskl}
+             \STATE $\vec{g}^{(k)} \gets \frac{\partial \mathcal{E}}{\partial\va^{(k)}}$ (see \autoref{tab:losses})
+             \STATE \# Aggregate inverse gradients for dampening updates of $\va$
+             \STATE $\vec{G}_{ii} \leftarrow \vec{G}_{ii} + \left(g^{(k)}_{ji}\right)^2$ for all $i \in\mathcal{I}^{(k)}$ and $j\in\mathcal{J}^{(k)}$
+           \ENDFOR
+         \ENDFOR
+         \STATE \# Update weight vector 
+         \STATE $\va \leftarrow \va - \vec{G}^{-\frac{1}{2}} \sum_k \vec{g}^{(k)}$
+       \ENDWHILE
+   \end{algorithmic}
+ \end{algorithm}
 
-\begin{algorithm}
-  \begin{algorithmic}[1]
-    \caption{Distributed Non-Linear Support-Vector Machine\label{alg:dskl_svm_distributed}}
-      \REQUIRE sample size $s$, number of workers $K$
-   \STATE \# Initialize coefficients $\va$
-      \STATE \# Generate samples for all workers
-      \STATE $\vec{X}^{(0)},\dots,\vec{X}^{(K)} \leftarrow$ samples of size $s$ from $\vec{X}$
-      \STATE $\vec{y}^{(0)},\dots,\vec{y}^{(K)} \leftarrow$ corresponding label samples of $\vec{y}$
-      \STATE $\vec{G} \leftarrow \mathbb{I}$
-      \WHILE{Not Converged}
-      	    \STATE \# Broadcast $\va$ to all workers
-	    \FORALL{workers $k$}      
-		\STATE $\hat{\vec{G}}^{(k)} \leftarrow \mathbf{0}$
-		\STATE \# Sample indices $\mathcal{I}^{(k)}$ for gradient 
-		\STATE \# Sample indices $\mathcal{J}^{(k)}$ for empirical kernel map
-		\STATE \# Compute gradients as in Algorithm~\autoref{alg:dskl}
-		\STATE $\vec{g}^{(k)} \gets \frac{\partial \mathcal{E}}{\partial\va^{(k)}}$ (see \autoref{tab:losses})
-		\STATE $\hat{G}_{ii}^{(k)} \leftarrow \left(g^{(k)}_{ji}\right)^2$ for all $i \in\mathcal{I}^{(k)}$ and $j\in\mathcal{J}^{(k)}$
-	    \ENDFOR
-	\STATE \# Aggregate inverse gradients for dampening updates of $\va$
-        	\STATE $\vec{G} \leftarrow \vec{G} + \sum_k \hat{\vec{G}}^{(k)}$     
-	\STATE \# Update weight vector 
-        \STATE $\va \leftarrow \va - G^{-\frac{1}{2}} \sum_k \vec{g}^{(k)}$
-      \ENDWHILE
-  \end{algorithmic}
-\end{algorithm}
+\sebastian{we need to list the experiments of Nikolaas here}
 
-We follow a very simple scheme for the distributed implementation in which we draw a large set of samples with replacement in the beginning when partitioning the data onto the different workers. This redundant sample is then cached on the workers, instead of resampling in every iteration and re-partitioning the data. The rationale is to bring the computation as close as possible to the data and reduce communication cost. The simplicity of the distributed algorithm allows it to be easily implemented in most distributed data processing systems currently deployed in industry, such as \textit{Apache Spark}~\cite{Zaharia2012}, \textit{Apache Flink}~\cite{Alexandrov2014} or \textit{h20}\footnote{http://www.h2o.ai/}. 
 
-We create a reference implementation in Spark as follows. Here the execution is controlled by a driver program on a master machine which schedules the computations on the workers in the cluster. First, we generate the indexes for the partition samples in a multithreaded fashion on the driver machine~(c.f., lines 3 \& 4). Next, we execute a distributed broadcast-join between the generated indexes and the datapoints. We group the join result by the partition indexes and pack all datapoints $\vec{X}^{(k)}$ and $\vec{y}^{(k)}$ of a partition $k$ into a memory-efficient datastructure. We advise the system to cache the partitions in the main memory of the cluster. Precomputing the partitions in this way allows us to execute the actual learning algorithm via a simple iterative \textit{Map-Reduce-Update} scheme. We initialize the vector of dual coefficients $\alpha$ and broadcast it to all worker machines. Then, we execute a single iteration of the learning algorithm as follows. First, we run the gradient computation~(c.f., lines 9 \& 14) in an embarassingly parallel manner on every partition via a \textit{map} operation. The summations of the gradients and their inverses (in lines 17 \& 19) require a global aggregation, which we conduct via a global \textit{reduce}, executed in a tree aggregation. Finally, we \textit{update} the coefficients vector (in line 19) and re-broadcast it to all workers. 
+% \subsection{Distributed infrastructure}\label{sec:distributed}
+% This section describes the experiments performed on distributed infrastructure. We list the pseudocode in algorithm\autoref{alg:dskl_svm_distributed}. The only difference to algorithm \autoref{alg:dskl} is that the data is distributed to multiple workers in a cluster and the learning happens in parallel. We use sampling with replacement to re-partition the data onto the different workers. Partition sizes can be chosen flexibly which ensures that we have redundancy in the data partitions, i.e. one data point can be on multiple machines. This allows the algorithm to access more than just the block-diagonal parts of the full kernel matrix, as opposed to approaches such as \cite{Deisenroth2015}. 
 
-\begin{figure}[!ht]
-  \centering
-    \includegraphics[width=0.6\columnwidth]{imgs/linear-speedup}
-     \caption{Linear speedup when increasing computing resources.}
-  \label{fig:scalability}
-\end{figure}
+% As a real-world data set we use a larger version of the MNIST data set, see e.g. \url{http://leon.bottou.org/projects/infimnist}, for the sake of easier comparison with other studies \cite{Lu2014, Dai2014}.
 
-We first run a scale-out experiment to determine how our implementation scales with increasing cluster resources. We use the \textit{mnist8m} dataset with 8 million observations, consisting of 784 features each, giving us a matrix with more than $6$ billion cells as input data. We run our spark implementation of Algorithm~\ref{alg:dskl_svm_distributed} on this dataset on a cluster comprised of 24 machines and choose the sample sizes in a way that the aggregate sample size amounts to the full dataset. We start by leveraging 6 machines and subsequently increase this number to 9, 12, 18 and the full 24 machines. We measure the runtime for each subsequent run; On the full cluster, an iteration takes approximately 6 seconds\footnote{note that our implementation is a proof of concept in Scala; there is much rooom for performance improvements by using a language like C++ and native matrix libraries; furthermore, the runtime is dependent on the number of samples drawn}; We compute the speedups in comparison to the smallest setup (c.f.,~Figure~\ref{fig:scalability}) and find that increasing the cluster resources results in a roughly linear speedup. Although the speedups are far from perfect, mostly due to the costly broadcast operation, our algorithm shows the desired scalability property: the ability to handle more data by simply increasing cluster resources.
+% \begin{algorithm}
+%   \begin{algorithmic}[1]
+%     \caption{Distributed Non-Linear Support-Vector Machine\label{alg:dskl_svm_distributed}}
+%       \REQUIRE sample size $s$, number of workers $K$
+%    \STATE \# Initialize coefficients $\va$
+%       \STATE \# Generate samples for all workers
+%       \STATE $\vec{X}^{(0)},\dots,\vec{X}^{(K)} \leftarrow$ samples of size $s$ from $\vec{X}$
+%       \STATE $\vec{y}^{(0)},\dots,\vec{y}^{(K)} \leftarrow$ corresponding label samples of $\vec{y}$
+%       \STATE $\vec{G} \leftarrow \mathbb{I}$
+%       \WHILE{Not Converged}
+%       	    \STATE \# Broadcast $\va$ to all workers
+% 	    \FORALL{workers $k$}      
+% 		\STATE $\hat{\vec{G}}^{(k)} \leftarrow \mathbf{0}$
+% 		\STATE \# Sample indices $\mathcal{I}^{(k)}$ for gradient 
+% 		\STATE \# Sample indices $\mathcal{J}^{(k)}$ for empirical kernel map
+% 		\STATE \# Compute gradients as in Algorithm~\autoref{alg:dskl}
+% 		\STATE $\vec{g}^{(k)} \gets \frac{\partial \mathcal{E}}{\partial\va^{(k)}}$ (see \autoref{tab:losses})
+% 		\STATE $\hat{G}_{ii}^{(k)} \leftarrow \left(g^{(k)}_{ji}\right)^2$ for all $i \in\mathcal{I}^{(k)}$ and $j\in\mathcal{J}^{(k)}$
+% 	    \ENDFOR
+% 	\STATE \# Aggregate inverse gradients for dampening updates of $\va$
+%         	\STATE $\vec{G} \leftarrow \vec{G} + \sum_k \hat{\vec{G}}^{(k)}$     
+% 	\STATE \# Update weight vector 
+%         \STATE $\va \leftarrow \va - G^{-\frac{1}{2}} \sum_k \vec{g}^{(k)}$
+%       \ENDWHILE
+%   \end{algorithmic}
+% \end{algorithm}
+
+% We follow a very simple scheme for the distributed implementation in which we draw a large set of samples with replacement in the beginning when partitioning the data onto the different workers. This redundant sample is then cached on the workers, instead of resampling in every iteration and re-partitioning the data. The rationale is to bring the computation as close as possible to the data and reduce communication cost. The simplicity of the distributed algorithm allows it to be easily implemented in most distributed data processing systems currently deployed in industry, such as \textit{Apache Spark}~\cite{Zaharia2012}, \textit{Apache Flink}~\cite{Alexandrov2014} or \textit{h20}\footnote{http://www.h2o.ai/}. 
+
+% We create a reference implementation in Spark as follows. Here the execution is controlled by a driver program on a master machine which schedules the computations on the workers in the cluster. First, we generate the indexes for the partition samples in a multithreaded fashion on the driver machine~(c.f., lines 3 \& 4). Next, we execute a distributed broadcast-join between the generated indexes and the datapoints. We group the join result by the partition indexes and pack all datapoints $\vec{X}^{(k)}$ and $\vec{y}^{(k)}$ of a partition $k$ into a memory-efficient datastructure. We advise the system to cache the partitions in the main memory of the cluster. Precomputing the partitions in this way allows us to execute the actual learning algorithm via a simple iterative \textit{Map-Reduce-Update} scheme. We initialize the vector of dual coefficients $\alpha$ and broadcast it to all worker machines. Then, we execute a single iteration of the learning algorithm as follows. First, we run the gradient computation~(c.f., lines 9 \& 14) in an embarassingly parallel manner on every partition via a \textit{map} operation. The summations of the gradients and their inverses (in lines 17 \& 19) require a global aggregation, which we conduct via a global \textit{reduce}, executed in a tree aggregation. Finally, we \textit{update} the coefficients vector (in line 19) and re-broadcast it to all workers. 
+
+% \begin{figure}[!ht]
+%   \centering
+%     \includegraphics[width=0.6\columnwidth]{imgs/linear-speedup}
+%      \caption{Linear speedup when increasing computing resources.}
+%   \label{fig:scalability}
+% \end{figure}
+
+% We first run a scale-out experiment to determine how our implementation scales with increasing cluster resources. We use the \textit{mnist8m} dataset with 8 million observations, consisting of 784 features each, giving us a matrix with more than $6$ billion cells as input data. We run our spark implementation of Algorithm~\ref{alg:dskl_svm_distributed} on this dataset on a cluster comprised of 24 machines and choose the sample sizes in a way that the aggregate sample size amounts to the full dataset. We start by leveraging 6 machines and subsequently increase this number to 9, 12, 18 and the full 24 machines. We measure the runtime for each subsequent run; On the full cluster, an iteration takes approximately 6 seconds\footnote{note that our implementation is a proof of concept in Scala; there is much rooom for performance improvements by using a language like C++ and native matrix libraries; furthermore, the runtime is dependent on the number of samples drawn}; We compute the speedups in comparison to the smallest setup (c.f.,~Figure~\ref{fig:scalability}) and find that increasing the cluster resources results in a roughly linear speedup. Although the speedups are far from perfect, mostly due to the costly broadcast operation, our algorithm shows the desired scalability property: the ability to handle more data by simply increasing cluster resources.
 
 \section{Conclusion}
 When modelling complex functions, the practitioner usually has three main options: Decision-Tree based methods, Neural Networks and Kernel methods. While Tree based methods appear to dominate most Kaggle competitions and in general have a stunning performance on real-world data sets \cite{Caruana2006}. The results of this paper were purely empirical and could also be interpreted as: Tree-based implementations work best out-of-the-box. Implementing such a method however can be difficult, especially in a distributed setting. More importantly tree based methods are mostly known for supervised learning tasks -- unsupervised modelling with tree-based methods appears to be not a well established genre. Neural Networks became extremely popular and powerful tools, mostly due to the availability of novel technology for training them. This technology is of course beneficial for all other learning paradigms as well. The results obtained with the above models are however difficult to compare with kernel methods: Kernel methods do not scale to the amounts of data used to achieve state of the art performance with deep networks. And it is difficult to compare methods if they were not trained on the same amount of data.
@@ -324,13 +353,15 @@ When modelling complex functions, the practitioner usually has three main option
 
 Deep neural networks yield stunning performance improvements on many tasks -- but they can be tricky to design and train.
 This is where kernel methods can offer some advantages: Instead of designing a complicated network architecture one can simply pick an off-the-shelf kernel function for a given type of data and then do model selection over just a handful of kernel parameters. And instead of tweaking a tree-based algorithm or a neural network into an unsupervised learning paradigm, one can combine a kernel function with both unsupervised {\em and} supervised learning in a principled way.  
-
 Many researchers have argued before that when properly applied to large data sets kernel methods can be a sensible alternative to other methods \cite{Lu2014}. Here we extend the set of large scale kernel methods by a very simple algorithm that is easy to implement and distribute and achieves competitive performance. 
 \felix{We will also discuss how it depends on the data set whether it is better in practice to either randomly sample basis functions of explicit kernel functions approximations or data points for expansion of the empirical kernel function. }
 
+We found that in its presented form, our approach is not well suited for distributed data processing systems like \textit{Apache Spark}~\cite{Zaharia2012} or \textit{Apache Flink}~\cite{Alexandrov2014} which use a shared-nothing architecture. This is due to the fact that a naive distributed execution of our algorithm would impose a high amount of communication per iteration for aggregating the gradients over the network, as well as for re-distributing the updated parameter vector. A variant that updates parameters locally on the slaves in the cluster, and only updates the global model from time to time (thereby reducing inter-machine communication) could be worth to look into in the future. Another interesting direction would be implement the doubly stochastic approach on graphics cards, to leverage their potential for massive parallel computation, which our algorithm amends itself to.
+
 \newpage
 
-\bibliography{dskl}
-\bibliographystyle{plain}
+{\small
+  \bibliography{dskl}
+  \bibliographystyle{plain}}
 
 \end{document} 
