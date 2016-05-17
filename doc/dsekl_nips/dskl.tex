@@ -35,7 +35,7 @@
 \renewcommand{\vec}[1]{\mathbf{#1}}
 
 \newcommand{\felix}[1]{\textcolor{blue}{{\bf Felix:} #1}}
-\newcommand{\niklaas}[1]{\textcolor{green}{{\bf Niklaas:} #1}}
+\newcommand{\nikolaas}[1]{\textcolor{green}{{\bf Niklaas:} #1}}
 \newcommand{\sebastian}[1]{\textcolor{red}{{\bf Sebastian:} #1}}
 
 % For algorithms
@@ -299,6 +299,43 @@ This section describes the experiments performed using a parallel, shared-memory
  \end{algorithm}
 
 \sebastian{we need to list the experiments of Nikolaas here}
+
+
+\begin{figure}[!ht]
+	\begin{subfigure}[b]{0.5\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{imgs/covertype_validation.pdf}
+		\caption{Validation error per epoche on full Covertype Dataset}
+		\label{fig:covertype_validation}
+	\end{subfigure}
+	\begin{subfigure}[b]{0.5\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{imgs/speedup_58.pdf}
+		\caption{Speedup on a single machine with multiple cores. All speedups are compared to runtime on two cores.}
+		\label{fig:speedup_58}
+	\end{subfigure}
+\end{figure}
+
+We use the full covertype dataset, consisting of ca 580000 datapoints with 54 features, using batches of 10000 training points and 10000 samples (such that the batches still fit into main memory), for the regularization parameter $C$ is set to $\frac{1}{n}$, where $n$ is the number of training points, the RBF scale is set to 1.0. We employ a weight decay factor of $\frac{1}{i}$, where $i$ is the number of iterations. The training process is stopped if the weight change over one epoch is less than 1.
+Additionally we separate 1122 random samples for validation after each training epoch (i.e. computing all gradients for all combinations of training point sample and kernel map sample).
+Figure \ref{fig:covertype_validation} depicts the validation error after each epoch.
+Note, that after one epoch the validation error decreases drastically from 51\% to 17\%.
+As test set 20000 random sample are separated from the training data. We achieve an final error rate on the test set of 13.34 \%. 
+These results are comparable to \cite{Dai2014}, which achieve a test error of also about 17\% after one iteration. 
+\nikolaas{Kann man das so sagen ? Die sagen ungefähr 15\%, im graphen ist das eher 17, wisst ihr sonst noch was man vergleichen könnte? }
+
+
+Figure \ref{fig:speedup_58} shows the speedup achieved through the usage of multiple cores in a shared memory architecture.
+The algorithm runs on a 48 core machine with 500 gb main memory, the algorithm was implemented in Python. We measure the time of processing one training data batch, which is evaluated against all kernel batches in parallel on the full covertype dataset. This amounts of 58 processes for one training batch evaluation. Speedups are evaluated against the runtime on 2 cores. We measure the computation time with an increase of cores of two.
+
+Here we can observe a linear speedup till we reach about 30 cores. the ``flat'' regions in the graph (e.g. 22-28) are possibly an artifact of spawning only a number of processes that equals the number of selected cores at once, such that if the number of batches is not divisible by the number of cores, we have to wait on the last fraction of processes to finish. 
+\nikolaas{das was sebastian letztes treffen gesagt hat, gibts da nen fachwort für ?}
+A possible explanation for the drop in speedup after 30 cores could be the Global interpreter lock (GIL) of python, which results in increased communication 
+\nikolaas{oder ``locking'' overhead, thread muss 10 mal anfragen ob er dran sein darf oder ob noch alles gelockt ist, so hab ich das verstanden..} overhead the more processes we spawn.
+
+
+
+
 
 
 % \subsection{Distributed infrastructure}\label{sec:distributed}
