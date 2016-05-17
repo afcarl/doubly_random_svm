@@ -213,7 +213,7 @@ In order to provide a qualitative comparison between the different kernel map ap
 
 
 \subsection{Serial Execution}\label{sec:single_host}
-We ran small-scale experiments in a single threaded implementation of \autoref{alg:dskl}. We generated $N=100$ data points according to the XOR problem, see \autoref{fig:toy_data}, and optimized all hyperparameters as described in \autoref{sec:experiments}.
+We ran small-scale experiments in a single threaded implementation of algorithm~\autoref{alg:dskl}. We generated $N=100$ data points according to the XOR problem, see \autoref{fig:toy_data}, and optimized all hyperparameters as described in \autoref{sec:experiments}.
 %
 \autoref{fig:toydata_comparisons} shows comparisons of the proposed method with random kitchen sinks and a fixed random selection of data points, as well as with a batch setting. We plot the error on the test set when varying $I$, the number of samples for computing the gradient, in \autoref{fig:expand_20_pred_1} and \autoref{fig:expand_20_pred_50}. \autoref{fig:pred_20_expand_1} and \autoref{fig:pred_20_expand_50} show the error when varying $J$, the number of expansion coefficients. Note that with too few data points for computing the gradient or the expansion, both random kitchen sinks as well as a fixed sample of data points have an advantage over the doubly stochastic approach. As the number of data points in the gradient computation and the kernel map expansion increases however, doubly stochastic kernel learning achieves performance comparable to that of batch methods (indicated as dotted line).
 %
@@ -246,7 +246,7 @@ We ran small-scale experiments in a single threaded implementation of \autoref{a
 \end{figure}
 %
 
-We performed experiments on a number of standard benchmark real world data sets available on the libsvm homepage\footnote{\url{https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/binary.html}}. We compare to the batch version using serial execution and small data sets. We discuss experiments on larger datasets, leveraging our parallel variant in \autoref{sec:distributed}. For all experiments we sampled $\min(1000,N_{\text{dataset}})$ data points where $N_{\text{dataset}}$ is the number of data points in that data set, and took half the data for training and half the data for testing, including hyperparameter optimization on the training set. We ran 10 repetitions of each experiment and show the test set error in \autoref{tab:small_realdata}. In all the data sets which we investigated, the proposed doubly stochastic empirical kernel learning approach achieves errors comparable to that of a batch SVM. In cases where the batch SVM achieves perfect accuracy and DSEKL still results in a few errors, we emphasize that these comparisons are conducted to show that DSEKL can achieve performances comparable with batch methods. Refining the SGD optimization or running more iterations can further improve the performance, yet our main intention is to provide a proof of concept for the doubly stochastic approach. Also note that the proposed DSEKL approach uses only a fraction of the data in each step. This allows for training on much larger data sets, which we discuss in the next section.
+We performed experiments on a number of standard benchmark real world data sets available on the libsvm homepage\footnote{\url{https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/binary.html}}. We compare to the batch version using serial execution and small data sets. We discuss experiments on a larger dataset, leveraging our parallel variant in \autoref{sec:distributed}. For all experiments, we sampled $\min(1000,N_{\text{dataset}})$ data points where $N_{\text{dataset}}$ is the number of data points in the respective data set, and took half the data for training and half the data for testing, including hyperparameter optimization on the training set. We ran 10 repetitions of each experiment and show the test set error in \autoref{tab:small_realdata}. In all data sets  investigated, the proposed doubly stochastic empirical kernel learning approach achieves errors comparable to that of a batch SVM. In cases where the batch SVM achieves perfect accuracy and DSEKL still results in a few errors, we emphasize that we conduct these comparisons to show that DSEKL has the potential to achieve performance comparable to that of batch methods. Refining the SGD optimization or running more iterations could further improve the performance, yet our main intention is to only provide a proof of concept for the doubly stochastic approach. Also note that the proposed DSEKL approach only uses a fraction of the data in each step. This allows for training on much larger data sets, which we discuss in the next section.
 %
 \begin{table}
 \begin{center}
@@ -262,12 +262,12 @@ Skin/non-skin & 0.03$\pm$0.01 &  0.01$\pm$0.00\\
 Madelon & 0.03$\pm$0.01 &  0.00$\pm$0.00\\
  \hline
 \end{tabular}
-\caption{Test error (mean $\pm$ standard deviation across 10 repetitions) on real world data sets. Doubly stochastic empirical kernel learning (DSEKL) achieves performances comparable to batch kernel SVM. \label{tab:small_realdata}}
+\caption{Test error (mean $\pm$ standard deviation across 10 repetitions) on real world data sets. Doubly stochastic empirical kernel learning (DSEKL) achieves performance comparable to that of a batch kernel SVM. \label{tab:small_realdata}}
 \end{center}
 \end{table}
 %
- \subsection{Parallel Execution using a Shared-Memory abstraction}\label{sec:distributed}
-This section describes the experiments performed using a parallel, shared-memory variant of our approach. We list the pseudocode in algorithm\autoref{alg:dskl_svm_distributed}. The difference to algorithm \autoref{alg:dskl} is that we run multiple workers at the same time and process multiple samples for the empirical kernel map per iteration to make the learning happen in parallel. We use sampling without replacement to partition the data for the different workers. 
+ \subsection{Parallel Execution using a Shared-Memory Variant}\label{sec:distributed}
+This section describes the experiments performed using a parallel, shared-memory variant of our approach. We list the pseudocode in algorithm~\autoref{alg:dskl_svm_distributed}. The difference to algorithm~\autoref{alg:dskl} is that we run multiple workers at the same time, and process multiple samples for the empirical kernel map per iteration to make the learning happen in parallel. We use sampling without replacement to partition the data for the different workers. 
 
  \begin{algorithm}
    \begin{algorithmic}[1]
@@ -281,7 +281,7 @@ This section describes the experiments performed using a parallel, shared-memory
          \FORALL{samples $\mathcal{I}^{(0)},\dots,\mathcal{I}^{(K)}$}      
            \FORALL{samples $\mathcal{J}^{(0)},\dots,\mathcal{J}^{(K)}$ in parallel on worker $k$} 
              \STATE \# Compute gradients as in Algorithm~\autoref{alg:dskl}
-             \STATE $\vec{g}^{(k)} \gets \frac{\partial \mathcal{E}}{\partial\va^{(k)}}$ (see \autoref{tab:losses})
+             \STATE $\vec{g}^{(k)} \gets \frac{\partial \mathcal{E}}{\partial\va}$
              \STATE \# Aggregate inverse gradients for dampening updates of $\va$
              \STATE $\vec{G}_{ii} \leftarrow \vec{G}_{ii} + \left(g^{(k)}_{ji}\right)^2$ for all $i \in\mathcal{I}^{(k)}$ and $j\in\mathcal{J}^{(k)}$
            \ENDFOR
@@ -310,24 +310,20 @@ This section describes the experiments performed using a parallel, shared-memory
 	\end{subfigure}
 \end{figure}
 
-We use the full covertype dataset, consisting of ca 580000 datapoints with 54 features, using batches of 10000 training points and 10000 kernel samples (such that the batches still fit into main memory), the regularization parameter $C$ is set to $\frac{1}{n}$, where $n$ is the number of training points, the RBF scale is set to 1.0. We employ a weight decay factor of $\frac{1}{i}$, where $i$ is the number of epochs. The training process is stopped if the $L_{2}$ norm of the weight change over one epoch is less than 1.
-Additionally, we separate 1122 random samples for validation after each training epoch (i.e. computing all gradients for all combinations of training point sample and kernel map sample).
-Figure \ref{fig:covertype_validation} depicts the validation error after each epoch.
-Note, that after one epoch the validation error decreases drastically from 51\% to 17\%.
-As test set 20000 random sample are separated from the training data. We achieve a final error rate on the test set of 13.34 \%. 
-These results are comparable to \cite{Dai2014}, which achieve a test error of also about 17\% after one iteration. 
+We ran our experiment on the covertype dataset~\footnote{\url{https://archive.ics.uci.edu/ml/datasets/Covertype}}, consisting of ca 581,012 datapoints with 54 features. We drew samples of 10,000 points for training and 10,000 kernel samples (such that the samples still fit into main memory), and set the regularization parameter $C$ to $1 / N_{dataset}$, and fix the RBF scale to $1.0$. We employ a weight decay factor of $\frac{1}{i}$, where $i$ is the number of epochs. We stop the training process if the $L_{2}$ norm of the weight change over one epoch is less than $1$. Additionally, we separate 1122 random samples for validation after each training epoch (i.e.,~computing all gradients for all combinations of training point sample and kernel map sample).
+Figure \ref{fig:covertype_validation} depicts the validation error after each epoch. Note, that after one epoch the validation error decreases drastically from 51\% to 17\%. We separated a random sample of 20,000 data points as test set from the training data. We achieve a final error rate on the test set of 13.34\%. 
+These results are comparable to \cite{Dai2014}, which also achieve a test error of also about 17\% after one iteration. 
 \nikolaas{Kann man das so sagen ? Die sagen ungefähr 15\%, im graphen ist das eher 17, wisst ihr sonst noch was man vergleichen könnte? }
-
+\sebastian{wenn die 15 sagen, sollten wir ihnen das glauben :) Sind wir nach einer Epoch bei 13.34?}
 
 Figure \ref{fig:speedup_58} shows the speedup achieved through the usage of multiple cores in a shared memory architecture.
-The algorithm runs on a 48 core machine with 500 gb main memory, the algorithm was implemented in Python. We measure the time of processing one training data batch, which is evaluated against all kernel batches in parallel on the full covertype dataset. This amounts of 58 processes for one training batch evaluation. Speedups are evaluated against the runtime on 2 cores. We measure the computation time with an increase of cores of two.
+A python implementation of our algorithm runs on a 48 core machine with 500 gb main memory. We measure the time of processing one training data batch, which is evaluated against all kernel batches in parallel on the full covertype dataset. This amounts to a degree of parallelism of 58 for one training batch evaluation. We measure speedups against the runtime on 2 cores \sebastian{wäre viel besser gegen einen core zu vergleichen, dann sind auch die zahlen groesser :)}, and increase by the parallelism by two cores at a time.
 
-Here we can observe a linear speedup till we reach about 30 cores. the ``flat'' regions in the graph (e.g. 22-28) are possibly an artifact of spawning only a number of processes that equals the number of selected cores at once, such that if the number of batches is not divisible by the number of cores, we have to wait on the last fraction of processes to finish. 
-\nikolaas{das was sebastian letztes treffen gesagt hat, gibts da nen fachwort für ?}
+We observed a linear speedup until 20 cores where we achieved an 8 times speedup compared to only 2 cores. After that, the speedup curve flattens out, and finally drops after 32 cores. \sebastian{This needs to be rewritten, we need to be more sure here...}
 A possible explanation for the drop in speedup using more than 30 cores could be the implementation of python process that are used for concurrent computations. The data is not shared but serialized and sent, when a new process is spawned, creating additional overhead with an increased number of processes.
 %A possible explanation for the drop in speedup after 30 cores could be the Global interpreter lock (GIL) of python, which results in increased communication 
 %\nikolaas{oder ``locking'' overhead, thread muss 10 mal anfragen ob er dran sein darf oder ob noch alles gelockt ist, so hab ich das verstanden..} overhead the more processes we spawn.
-
+\sebastian{We need a summary here: We achieve comparable performance and show huge parallelization potential.}
 
 
 
@@ -383,9 +379,9 @@ When modelling complex functions, the practitioner usually has three main option
 
 %From a theoretical standpoint one could argue that there is not much reason to believe why kernel methods should be superior or inferior to neural networks; following the universal approximation theorem  \cite{Cybenko1989}, any function can be approximated with a single hidden layer. And even many introductory tutorials to neural networks highlight the commonalities between these shallow neural networks and kernel machines. 
 
-Deep neural networks yield stunning performance improvements on many tasks -- but they can be tricky to design and train.
-This is where kernel methods can offer some advantages: Instead of designing a complicated network architecture one can simply pick an off-the-shelf kernel function for a given type of data and then do model selection over just a handful of kernel parameters. And instead of tweaking a tree-based algorithm or a neural network into an unsupervised learning paradigm, one can combine a kernel function with both unsupervised {\em and} supervised learning in a principled way.  
-Many researchers have argued before that when properly applied to large data sets kernel methods can be a sensible alternative to other methods \cite{Lu2014}. Here we extend the set of large scale kernel methods by a very simple algorithm that is easy to implement and distribute and achieves competitive performance. 
+Deep neural networks yield stunning performance improvements on many tasks -- but they are tricky to design and train.
+This is where kernel methods offer some advantages: Instead of designing a complicated network architecture one simply picks an off-the-shelf kernel function for a given type of data and then do model selection over just a handful of kernel parameters. And instead of tweaking a tree-based algorithm or a neural network into an unsupervised learning paradigm, one can combine a kernel function with both unsupervised {\em and} supervised learning in a principled way.  
+Many researchers have argued before that when properly applied to large data sets kernel methods are a sensible alternative to other methods \cite{Lu2014}. Here we extend the set of large scale kernel methods by a very simple algorithm that is easy to implement and distribute and achieves competitive performance. 
 \felix{We will also discuss how it depends on the data set whether it is better in practice to either randomly sample basis functions of explicit kernel functions approximations or data points for expansion of the empirical kernel function. }
 
 We found that in its presented form, our approach is not well suited for distributed data processing systems like \textit{Apache Spark}~\cite{Zaharia2012} or \textit{Apache Flink}~\cite{Alexandrov2014} which use a shared-nothing architecture. This is due to the fact that a naive distributed execution of our algorithm would impose a high amount of communication per iteration for aggregating the gradients over the network, as well as for re-distributing the updated parameter vector. A variant that updates parameters locally on the slaves in the cluster, and only updates the global model from time to time (thereby reducing inter-machine communication) could be worth to look into in the future. Another interesting direction would be implement the doubly stochastic approach on graphics cards, to leverage their potential for massive parallel computation, which our algorithm amends itself to.
