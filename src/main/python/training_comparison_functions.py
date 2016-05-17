@@ -4,6 +4,10 @@ import matplotlib.pyplot as plt
 from sklearn import svm
 from numpy.random import multivariate_normal as mvn
 
+font = {'family' : 'normal',
+        'weight' : 'normal',
+        'size'   : 20}
+figSize = (7,6.5)
 
 def GaussianKernel(X1, X2, sigma):
     assert(X1.shape[0] == X2.shape[0])
@@ -19,7 +23,7 @@ def run_comparison_pred(N=100,features=2,nPredSamples=[1,20,50],its=100,reps=100
     eta = 1.
     nExpand = 20
     plt.ion()
-    plt.figure(figsize=(6,4.5))
+    plt.figure(figsize=figSize)
     colors = "brymcwg"
     leg = []
     for idx,cond in enumerate(nPredSamples):
@@ -46,17 +50,18 @@ def run_comparison_pred(N=100,features=2,nPredSamples=[1,20,50],its=100,reps=100
         plt.plot(EempFix.mean(axis=0),'k--')
         leg.append("Rks")
         leg.append("Emp")
-        leg.append("Emp_{Fix}")
+        leg.append("Emp$_{Fix}$")
 
         plt.plot(Ebatch.mean()*sp.ones(Eemp.shape[1]),'k:')
         leg.append("Batch")
         if idx==0:plt.legend(leg,loc=3)
-        plt.title("nPred=%d"%cond)
+        #plt.title("nPred=%d"%cond)
         plt.xlabel("Iterations")
         plt.ylabel("Error")
         plt.axis('tight')
+        plt.rc('font',**font)
+        plt.axis('tight')
         plt.ylim((0,.55))
-        #plt.axis('tight')
         plt.savefig("rks_emp_comparison-expand-%d-pred-%d.pdf"%(nExpand,cond))
 
 
@@ -66,7 +71,7 @@ def run_comparison_expand(N=100,features=4,nExpandSamples=[1,20,50],its=100,reps
     eta = 1.
     nPred = 20
     plt.ion()
-    plt.figure(figsize=(6,4.5))
+    plt.figure(figsize=figSize)
     colors = "brymcwg"
     leg = []
     for idx,cond in enumerate(nExpandSamples):
@@ -97,8 +102,9 @@ def run_comparison_expand(N=100,features=4,nExpandSamples=[1,20,50],its=100,reps
         plt.plot(Ebatch.mean()*sp.ones(Eemp.shape[1]),'k:')
         leg.append("Batch")
         if idx==0:plt.legend(leg,loc=3)
-        plt.title("nExpand=%d"%cond)
+        #plt.title("nExpand=%d"%cond)
         plt.xlabel("Iterations")
+        plt.rc('font',**font)
         plt.ylabel("Error")
         plt.axis('tight')
         plt.ylim((0,.55))
@@ -140,7 +146,7 @@ def fit_svm_dskl_rks(X,Y,Xtest,Ytest,its=100,eta=1.,C=.1,nPredSamples=10,nExpand
     return Erks
 
 def fit_svm_dskl_comparison(X,Y,its=100,eta=1.,C=.1,nPredSamples=10,nExpandSamples=10, kernel=(GaussianKernel,(1.))):
-    
+
     # split into train and test
     Xtest = X[:,:len(Y)/2]
     Ytest = Y[:len(Y)/2]
@@ -207,7 +213,7 @@ def compute_gradient(y,Xpred,Xexpand,w,kernel,C):
     return G
 
 def predict_svm_emp(Xexpand,Xtarget,w,kernel):
-	return w.dot(kernel[0](Xexpand,Xtarget,kernel[1]))
+    return w.dot(kernel[0](Xexpand,Xtarget,kernel[1]))
 
 def run_comparison_expand_krr(N=100,noise=0.1,nExpandSamples=[1,10,100],its=100,reps=100):
     plt.ion()
@@ -235,7 +241,7 @@ def run_comparison_expand_krr(N=100,noise=0.1,nExpandSamples=[1,10,100],its=100,
         leg.append("Emp, nSamp=%d"%cond)
         leg.append("Rks, nSamp=%d"%cond)
         leg.append("EmpFix, nSamp=%d"%cond)
-    
+
     Ebatch = fit_krr_batch(X,Y,Xtest,Ytest)
     plt.plot(Ebatch.mean()*sp.ones(Eemp.shape[1]),color='black')
     leg.append("Batch, nSamp=%d"%N)
@@ -252,7 +258,7 @@ def error_krr(y,yhat): return sp.corrcoef(y,yhat)[0,1]#sp.mean((y-yhat)**2)
 
 def fit_krr_batch_result(X,Y,Xtest,Ytest,kernel=(GaussianKernel,(1.))):
     return (sp.linalg.inv(kernel[0](X,X,kernel[1]) + sp.eye(X.shape[1]) * 1e-5).dot(Y)).dot(kernel[0](X,Xtest,kernel[1]))
-    
+
 def fit_krr_batch(X,Y,Xtest,Ytest,kernel=(GaussianKernel,(1.))):
     y = (sp.linalg.inv(kernel[0](X,X,kernel[1]) + sp.eye(X.shape[1]) * 1e-5).dot(Y)).dot(kernel[0](X,Xtest,kernel[1]))
     return error_krr(Ytest,y)
@@ -328,13 +334,13 @@ def compute_gradient_krr(y,Xpred,Xexpand,w,kernel,C):
 
 
 def make_data_twoclass(N=50):
-	# generates some toy data
-	mu = sp.array([[0,2],[0,-2]]).T
-	C = sp.array([[5.,4.],[4.,5.]])
-	X = sp.hstack((mvn(mu[:,0],C,N/2).T, mvn(mu[:,1],C,N/2).T))
-	Y = sp.hstack((sp.ones((1,N/2.)),-sp.ones((1,N/2.))))
-	return X,Y
-	
+    # generates some toy data
+    mu = sp.array([[0,2],[0,-2]]).T
+    C = sp.array([[5.,4.],[4.,5.]])
+    X = sp.hstack((mvn(mu[:,0],C,N/2).T, mvn(mu[:,1],C,N/2).T))
+    Y = sp.hstack((sp.ones((1,N/2.)),-sp.ones((1,N/2.))))
+    return X,Y
+
 def make_data_xor(N=80,noise=.25):
     # generates some toy data
     mu = sp.array([[-1,1],[1,1]]).T
@@ -346,38 +352,38 @@ def make_data_xor(N=80,noise=.25):
     X = X[:,randidx]
     return X,Y
 
-    
+
 def make_data_cos(N=100,noise=.3):
-	# generates some toy data
-	x = sp.randn(1,N)*sp.pi
-	y = sp.cos(x) + sp.randn(1,N) * noise
-	return x,y
+    # generates some toy data
+    x = sp.randn(1,N)*sp.pi
+    y = sp.cos(x) + sp.randn(1,N) * noise
+    return x,y
 
 def make_plot_twoclass(X,Y,W,kernel):
-	fig = plt.figure(figsize=(5,4))
-	fig.clf()
-	colors = "brymcwg"
+    fig = plt.figure(figsize=(5,4))
+    fig.clf()
+    colors = "brymcwg"
 
-	# Plot the decision boundary.
-	h = .2 # stepsize in mesh
-	x_min, x_max = X[0,:].min() - 1, X[0,:].max() + 1
-	y_min, y_max = X[1,:].min() - 1, X[1,:].max() + 1
-	xx, yy = sp.meshgrid(sp.arange(x_min, x_max, h),
-                     sp.arange(y_min, y_max, h))
-                     
-	Z = predict_svm_kernel(sp.c_[sp.ones(xx.ravel().shape[-1]), xx.ravel(), yy.ravel()].T,sp.vstack((sp.ones((1,X.shape[-1])),X)),W,kernel).reshape(xx.shape)
-	cs = plt.contourf(xx, yy, Z,alpha=.5)
+    # Plot the decision boundary.
+    h = .2 # stepsize in mesh
+    x_min, x_max = X[0,:].min() - 1, X[0,:].max() + 1
+    y_min, y_max = X[1,:].min() - 1, X[1,:].max() + 1
+    xx, yy = sp.meshgrid(sp.arange(x_min, x_max, h),
+            sp.arange(y_min, y_max, h))
+
+    Z = predict_svm_kernel(sp.c_[sp.ones(xx.ravel().shape[-1]), xx.ravel(), yy.ravel()].T,sp.vstack((sp.ones((1,X.shape[-1])),X)),W,kernel).reshape(xx.shape)
+    cs = plt.contourf(xx, yy, Z,alpha=.5)
     plt.axis('tight')
     plt.colorbar()
     plt.axis('equal')
-	y = sp.maximum(0,-Y)+1
-	# plot the data
+    y = sp.maximum(0,-Y)+1
+    # plot the data
     plt.hold(True)
 
-	ypred = 	W.T.dot(kernel[0](X,X,kernel[1]).T)
-	for ic in sp.unique(y):
-		idx = (y == int(ic)).flatten()
-		sv = (Y.flatten()[idx]*ypred[idx] < 1)
+    ypred = 	W.T.dot(kernel[0](X,X,kernel[1]).T)
+    for ic in sp.unique(y):
+        idx = (y == int(ic)).flatten()
+        sv = (Y.flatten()[idx]*ypred[idx] < 1)
         plt.plot(X[0,idx.nonzero()[0][sv]], X[1,idx.nonzero()[0][sv]], colors[int(ic)]+'o',markersize=13)
         plt.plot(X[0,idx.nonzero()[0][~sv]], X[1,idx.nonzero()[0][~sv]], colors[int(ic)]+'o',markersize=7)
     plt.axis('tight')
@@ -385,27 +391,27 @@ def make_plot_twoclass(X,Y,W,kernel):
     plt.xlabel('$X_1$')
     plt.ylabel('$X_2$')
 
-	#plt.title('SVM, Accuracy=%0.2f'%(Y==sp.sign(ypred)).mean())
+    #plt.title('SVM, Accuracy=%0.2f'%(Y==sp.sign(ypred)).mean())
 
-	#plt.show()
-	plt.savefig('./svm_kernel.pdf')
+    #plt.show()
+    plt.savefig('./svm_kernel.pdf')
 
-	fig = plt.figure(figsize=(5,5))
-	fig.clf()
-	colors = "brymcwg"
-	for ic in sp.unique(y):
-		idx = (y == int(ic)).flatten()
-		plt.plot(X[0,idx], X[1,idx], colors[int(ic)]+'o',markersize=8)
-	plt.axis('tight')
+    fig = plt.figure(figsize=(5,5))
+    fig.clf()
+    colors = "brymcwg"
+    for ic in sp.unique(y):
+        idx = (y == int(ic)).flatten()
+        plt.plot(X[0,idx], X[1,idx], colors[int(ic)]+'o',markersize=8)
+    plt.axis('tight')
 
-	plt.xlabel('$X_1$')
-	plt.ylabel('$X_2$')
-	plt.xlim((x_min,x_max))
-	plt.ylim((y_min,y_max))
-	plt.grid()
-	#plt.show()
-	plt.savefig('./svm_kernel_xor_data.pdf')
-	
+    plt.xlabel('$X_1$')
+    plt.ylabel('$X_2$')
+    plt.xlim((x_min,x_max))
+    plt.ylim((y_min,y_max))
+    plt.grid()
+    #plt.show()
+    plt.savefig('./svm_kernel_xor_data.pdf')
+
 def plot_xor_example():
     k = GaussianKernel
     kparam = 1.
