@@ -89,7 +89,7 @@ TU Berlin, Berlin, Germany\\
 \maketitle
 
 \begin{abstract} 
-With the rise of big data sets the popularity of kernel methods declined and neural networks took over again. The reason kernel methods have become unpopular is that the kernel matrix grows quadratically with the number of data points. Most attempts to scale up kernel methods  solve this problem by discarding data points or basis functions of some approximation of the kernel function. Here we present a simple yet effective way of scaling up kernel methods via doubly stochastic optimization of the emprical kernel map. The algorithm is simple to implement in particular in settings using parallel execution; it can leverage the full power and versatility of classical kernel functions without the need to formulate explicitly a kernel map approximation.
+With the rise of big data sets the popularity of kernel methods declined and neural networks took over again. The reason kernel methods have become unpopular is that the kernel matrix grows quadratically with the number of data points. Most attempts to scale up kernel methods  solve this problem by discarding data points or basis functions of some approximation of the kernel function. Here we present a simple yet effective way of scaling up kernel methods via doubly stochastic optimization of the emprical kernel map. The algorithm is straightforward to implement in particular in parallel execution settings; it can leverage the full power and versatility of classical kernel functions without the need to formulate explicitly a kernel map approximation.
 We build our work on a large body of existing theoretical work on kernel machines and provide empirical evidence that the algorithm works in practice on large data sets. 
 \end{abstract} 
 
@@ -130,7 +130,7 @@ Most kernel machines then minimize a function $\mathcal{E}(y, \Bx, \va, k)$ whic
 \mathcal{E}(y, \Bx, \va, k) = r(\va) + l(y, \Bx, \va, k).
 \end{align}
 %
-The regularizer $r(\va)$ often takes the form of some $\mathcal{L}_p$ norm of the vector of dual coefficients $\va$, where usually $p=2$. A popular example of \autoref{eq:error_function} is that of the kernel support-vector machine (SVM) \cite{Cortes1995}, a hinge los combined with a quadratic regularizer
+The regularizer $r(\va)$ often takes the form of some $\mathcal{L}_p$ norm of the vector of dual coefficients $\va$, where usually $p=2$. A popular example of \autoref{eq:error_function} is that of the kernel support-vector machine (SVM) \cite{Cortes1995}, a hinge loss combined with a quadratic regularizer
 %
 \begin{equation}\label{eq:svm_gradient}
 \mathcal{E}_{SVM} = ||\max \left(0,\ones-\text{diag}(\vec{y}) \vec{K} \va \right)||_1 + \lambda ||\va||_2, \quad \frac{\partial\mathcal{E}_{SVM}}{\partial \va} =\max \left(0,1-\left(\lambda\va - \vec{y}^{\top}\vec{K}\right)\right)
@@ -161,7 +161,7 @@ Which of the two approximations is better in practice is likely to depend on the
 Some empirical evidence suggests that the Nystr\"om approximation is better than random kitchen sinks \cite{Yang2012}. The authors of \cite{Vedaldi2010} perform an extensive comparison of various explicit kernel map approximations and empirical kernel maps, highlighting the advantages in the empirical kernel map approach: Empirical kernel maps have the potential to model some parts of the input distribution better -- but they have to be trained on data; this can be considered  a disadvantage. But then again any machine learning algorithm has to learn from data. There could be scenarios in which learning the feature representation (via empirical kernel maps) along the way gives performance gains. We are not aware of a concise comparison of the two approaches in a parallel setting. In our experimental section we provide a direct comparison between the two methods keeping the optimization part fixed and concentrating on the type of approximation. 
 %
 \section{Doubly stochastic kernel learning}\label{sec:dskl}
-This section describes the learning approach which we will refer to as doubly stochastic kernel learning (DSEKL). The key idea is that in each iteration a random sample $\mathcal{I}\subseteq\{1,2,\dots,N\}, |\mathcal{I}|=I$ of data points is chosen for computing the gradient of the dual coefficients $\va$ and another (independent) random sample  $\mathcal{J}\subseteq\{1,2,\dots,N\}, |\mathcal{J}|=J$ of data points is chosen for expanding the empirical kernel map $k(.,.)$. Note that this is very similar to Algorithm 1 and 2 in \cite{Dai2014}, except that instead of drawing random basis functions of the kernel function approximation, we sample random data points for expanding the empirical kernel map in \autoref{eq:kernel_trick}. If one were to compute the entire kernel matrix $\vec{K}\in\R^{N\times N}$, this procedure would correspond to sampling a rectangular submatrix $\vec{K}_{\mathcal{I,J}}\in\R^{I\times J}$. The number of data points $J$ sampled for expanding the empirical kernel map as well as the number of data points $I$ to compute the gradient are important parameters that determine the noise of the gradient of the dual coefficients and the noise of the empirical kernel map, respectively. The pseudocode in algorithm \autoref{alg:dskl} summarises the entire procedure, which alternates two steps: 1) sample a random submatrix of the kernel matrix and 2) take a gradient step along the direction of $\forall i\in \mathcal{I}, j\in\mathcal{J} \frac{\partial\mathcal{E}(\vec{x}_i)}{\partial \va_{j}}$, the gradient of $\mathcal{E}$ w.r.t. $\va$ at indices $\mathcal{J}$ evaluated at data points $\mathcal{I}$.
+This section describes the learning approach which we will refer to as doubly stochastic kernel learning (DSEKL). The key idea is that in each iteration a random sample $\mathcal{I}\subseteq\{1,2,\dots,N\}, |\mathcal{I}|=I$ of data points is chosen for computing the gradient of the dual coefficients $\va$ and another (independent) random sample  $\mathcal{J}\subseteq\{1,2,\dots,N\}, |\mathcal{J}|=J$ of data points is chosen for expanding the empirical kernel map $k(.,.)$. Note that this is very similar to Algorithm 1 and 2 in \cite{Dai2014}, except that instead of drawing random basis functions of the kernel function approximation, we sample random data points for expanding the empirical kernel map in \autoref{eq:kernel_trick}. If one were to compute the entire kernel matrix $\vec{K}\in\R^{N\times N}$, this procedure would correspond to sampling a rectangular submatrix $\vec{K}_{\mathcal{I,J}}\in\R^{I\times J}$. The number of data points $J$ sampled for expanding the empirical kernel map as well as the number of data points $I$ to compute the gradient are important parameters that determine the noise of the gradient of the dual coefficients and the noise of the empirical kernel map, respectively. The pseudocode in algorithm \autoref{alg:dskl} summarizes the entire procedure, which alternates two steps: 1) sample a random submatrix of the kernel matrix and 2) take a gradient step along the direction of $\forall i\in \mathcal{I}, j\in\mathcal{J} \frac{\partial\mathcal{E}(\vec{x}_i)}{\partial \va_{j}}$, the gradient of $\mathcal{E}$ w.r.t. $\va$ at indices $\mathcal{J}$ evaluated at data points $\mathcal{I}$.
 
 % 
 \begin{algorithm}
@@ -302,19 +302,20 @@ This section describes the experiments performed using a parallel, shared-memory
 	\begin{subfigure}[b]{0.4\textwidth}
 		\centering
 		\includegraphics[width=\textwidth]{imgs/covertype_validation.pdf}
-		\caption{Validation error per epoch on the full covertype Dataset.}
+		\caption{Validation error per epoch on the full covertype data set.}
 		\label{fig:covertype_validation}
 	\end{subfigure}
   \hfill
 	\begin{subfigure}[b]{0.4\textwidth}
 		\centering
 		\includegraphics[width=\textwidth]{imgs/speedup_58.pdf}
-		\caption{Speedup on a single machine with multiple cores, compared to runtime on two cores.}
+		\caption{Speedup on of the shared-memory variant with an increasing number of cores, compared to the runtime on two cores.}
 		\label{fig:speedup_58}
 	\end{subfigure}
 \end{figure}
 
-We ran our experiment on the covertype dataset\footnote{\url{https://archive.ics.uci.edu/ml/datasets/Covertype}}, consisting of 581,012 datapoints with 54 features. We drew samples of $I=10,000$ points for computing the gradient and $J=10,000$ for evaluating the empirical kernel map. For the sake of comparability with the results in \cite{Dai2014} we set the regularization parameter $\lambda$ to $1 / N$, and fix the RBF scale to $1.0$. We employ a weight decay factor of $\frac{1}{i}$, where $i$ is the number of epochs. We stop the training process if the $\mathcal{L}_{2}$ norm of the weight change over one epoch is less than $1$. Additionally, we separate 1122 random samples for validation after each training epoch (i.e.,~computing all gradients for all combinations of training point sample and kernel map sample).
+We ran our experiment on the covertype dataset\footnote{\url{https://archive.ics.uci.edu/ml/datasets/Covertype}}, consisting of 581,012 datapoints with 54 features. We drew samples of $I=10,000$ points for computing the gradient and $J=10,000$ for evaluating the empirical kernel map. For the sake of comparability with the results in \cite{Dai2014} we set the regularization parameter $\lambda$ to $1 / N$, and fix the RBF scale to $1.0$. We employ a weight decay factor of $\frac{1}{i}$, where $i$ is the number of epochs. We stop the training process if the $\mathcal{L}_{2}$ norm of the weight change over one epoch is less than $1$. Additionally, we separate 1122 random samples for validation after each training epoch (i.e. one pass through the data set).
+
 Figure \ref{fig:covertype_validation} depicts the validation error after each epoch. Note, that after one epoch the validation error decreases drastically from 51\% to 17\%. We separated a random sample of 20,000 data points as test set from the training data. We achieve a final error rate on the test set of 13.34\%. 
 These results are comparable to \cite{Dai2014}, which achieve a test error of 15\% after one iteration. 
 
