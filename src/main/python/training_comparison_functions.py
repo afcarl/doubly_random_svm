@@ -6,8 +6,9 @@ from numpy.random import multivariate_normal as mvn
 
 font = {'family' : 'normal',
         'weight' : 'normal',
-        'size'   : 20}
-figSize = (7,6.5)
+        'size'   : 11}
+figSize = (3,3)
+linewidth = 1
 
 def GaussianKernel(X1, X2, sigma):
     assert(X1.shape[0] == X2.shape[0])
@@ -45,20 +46,20 @@ def run_comparison_pred(N=100,features=2,nPredSamples=[1,20,50],its=100,reps=100
             Ebatch[irep,:] = fit_svm_batch(X,Y,Xtest,Ytest,1.)
 
         plt.clf()
-        plt.plot(Erks.mean(axis=0),'k-')
-        plt.plot(Eemp.mean(axis=0),'k.')
-        plt.plot(EempFix.mean(axis=0),'k--')
+        plt.plot(Erks.mean(axis=0),'k-.',lw=linewidth)
+        plt.plot(Eemp.mean(axis=0),'k-',lw=linewidth)
+        plt.plot(EempFix.mean(axis=0),'--',lw=linewidth,color='grey')
         leg.append("Rks")
         leg.append("Emp")
         leg.append("Emp$_{Fix}$")
 
-        plt.plot(Ebatch.mean()*sp.ones(Eemp.shape[1]),'k:')
+        plt.plot(Ebatch.mean()*sp.ones(Eemp.shape[1]),'k:',lw=linewidth)
         leg.append("Batch")
-        if idx==0:plt.legend(leg,loc=3)
+        #if idx==len(nPredSamples)-1:plt.legend(leg,loc=1)
         #plt.title("nPred=%d"%cond)
         plt.xlabel("Iterations")
         plt.ylabel("Error")
-        plt.axis('tight')
+        plt.tight_layout()
         plt.rc('font',**font)
         plt.axis('tight')
         plt.ylim((0,.55))
@@ -93,20 +94,21 @@ def run_comparison_expand(N=100,features=4,nExpandSamples=[1,20,50],its=100,reps
             Ebatch[irep,:] = fit_svm_batch(X,Y,Xtest,Ytest,1.)
 
         plt.clf()
-        plt.plot(Erks.mean(axis=0),'k-')
-        plt.plot(Eemp.mean(axis=0),'k.')
-        plt.plot(EempFix.mean(axis=0),'k--')
+        plt.plot(Erks.mean(axis=0),'k-.',lw=linewidth)
+        plt.plot(Eemp.mean(axis=0),'k-',lw=linewidth)
+        plt.plot(EempFix.mean(axis=0),'k--',lw=linewidth,color="grey")
         leg.append("Rks")
         leg.append("Emp")
         leg.append("Emp$_{Fix}$")
-        plt.plot(Ebatch.mean()*sp.ones(Eemp.shape[1]),'k:')
+
+        plt.plot(Ebatch.mean()*sp.ones(Eemp.shape[1]),'k:',lw=linewidth)
         leg.append("Batch")
-        if idx==0:plt.legend(leg,loc=3)
+        if idx==len(nExpandSamples)-1:plt.legend(leg,loc=1)
         #plt.title("nExpand=%d"%cond)
         plt.xlabel("Iterations")
         plt.rc('font',**font)
         plt.ylabel("Error")
-        plt.axis('tight')
+        plt.tight_layout()
         plt.ylim((0,.55))
         plt.savefig("rks_emp_comparison-pred-%d-expand-%d.pdf"%(nPred,cond))
 

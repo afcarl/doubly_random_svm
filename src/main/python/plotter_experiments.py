@@ -1,9 +1,11 @@
 import matplotlib
 import matplotlib.pyplot as plt
 
-# # font = {'family': 'normal',
-# #         'weight': 'bold',
-# #         'size': 22}
+font = {'family': 'normal',
+         'weight': 'normal',
+         'size': 11}
+linewidth = 2
+figSize = (5,3)
 #
 #
 # ## speedup graph
@@ -150,18 +152,21 @@ validation_error = [0.51,0.17,
 0.13]
 
 
-# plt.figure(figsize=(20,12))
+plt.figure(figsize=figSize)
 # colors = "brymcwg"
 leg = []
 # # plt.plot(Ebatch.mean()*sp.ones(Eemp.shape[1]),color='black')
 # ax = plt.scatter(cores,speedup)
 
 
-plt.plot(validation_error)
+plt.plot(validation_error,linewidth=linewidth)
 leg.append("Validation Error")
+plt.xlim(0,50)
 plt.legend(leg)
 plt.xlabel('Number of epochs')
 plt.ylabel('Validation Error')
 # plt.show()
+plt.rc('font',**font)
+plt.tight_layout()
 
 plt.savefig("covertype_validation.pdf",)
