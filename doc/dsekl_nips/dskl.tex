@@ -128,7 +128,7 @@ Most kernel machines then minimize a function $\mathcal{E}(y, \Bx, \va, k)$ whic
 \mathcal{E}(y, \Bx, \va, k) = r(\va) + l(y, \Bx, \va, k).
 \end{align}
 %
-The regularizer $r(\va)$ often takes the form of some $\mathcal{L}_p$ norm of the vector of dual coefficients $\va$, where usually $p=2$. A popular example of \autoref{eq:error_function} is that of the kernel support-vector machine (SVM) \cite{Cortes1995}, a hinge los combined with a quadratic regularizer
+The regularizer $r(\va)$ often takes the form of some $\mathcal{L}_p$ norm of the vector of dual coefficients $\va$, where usually $p=2$. A popular example of \autoref{eq:error_function} is that of the kernel support-vector machine (SVM) \cite{Cortes1995}, a hinge loss combined with a quadratic regularizer
 %
 \begin{equation}\label{eq:svm_gradient}
 \mathcal{E}_{SVM} = ||\max \left(0,\ones-\text{diag}(\vec{y}) \vec{K} \va \right)||_1 + \lambda ||\va||_2, \quad \frac{\partial\mathcal{E}_{SVM}}{\partial \va} =\max \left(0,1-\left(\lambda\va - \vec{y}^{\top}\vec{K}\right)\right)
@@ -298,19 +298,19 @@ This section describes the experiments performed using a parallel, shared-memory
 	\begin{subfigure}[b]{0.4\textwidth}
 		\centering
 		\includegraphics[width=\textwidth]{imgs/covertype_validation.pdf}
-		\caption{Validation error per epoch on the full covertype Dataset.}
+		\caption{Validation error per epoch on the full covertype data set.}
 		\label{fig:covertype_validation}
 	\end{subfigure}
   \hfill
 	\begin{subfigure}[b]{0.4\textwidth}
 		\centering
 		\includegraphics[width=\textwidth]{imgs/speedup_58.pdf}
-		\caption{Speedup on a single machine with multiple cores, compared to runtime on two cores.}
+		\caption{Speedup on of the shared-memory variant with an increasing number of cores, compared to the runtime on two cores.}
 		\label{fig:speedup_58}
 	\end{subfigure}
 \end{figure}
 
-We ran our experiment on the covertype dataset~\footnote{\url{https://archive.ics.uci.edu/ml/datasets/Covertype}}, consisting of 581,012 datapoints with 54 features. We drew samples of 10,000 points for training and 10,000 kernel samples, and set the regularization parameter $C$ to $1 / N_{dataset}$, and fix the RBF scale to $1.0$. We employ a weight decay factor of $\frac{1}{i}$, where $i$ is the number of epochs. We stop the training process if the $L_{2}$ norm of the weight change over one epoch is less than $1$. Additionally, we separate 1122 random samples for validation after each training epoch (i.e.,~computing all gradients for all combinations of training point sample and kernel map sample).
+We ran our experiment on the covertype data set~\footnote{\url{https://archive.ics.uci.edu/ml/datasets/Covertype}}, consisting of 581,012 datapoints with 54 features. We drew samples of 10,000 points for training and 10,000 kernel samples, and set the regularization parameter $C$ to $1 / N_{dataset}$, and fix the RBF scale to $1.0$. We employ a weight decay factor of $\frac{1}{i}$, where $i$ is the number of epochs. We stop the training process if the $L_{2}$ norm of the weight change over one epoch is less than $1$. Additionally, we separate 1122 random samples for validation after each training epoch (i.e.,~computing all gradients for all combinations of training point sample and kernel map sample).
 Figure \ref{fig:covertype_validation} depicts the validation error after each epoch. Note, that after one epoch the validation error decreases drastically from 51\% to 17\%. We separated a random sample of 20,000 data points as test set from the training data. We achieve a final error rate on the test set of 13.34\%. 
 These results are comparable to \cite{Dai2014}, which also achieve a test error of also about 15\% after one iteration. 
 
