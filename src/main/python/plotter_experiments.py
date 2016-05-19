@@ -35,8 +35,9 @@ def plot_large_scale():
     #
     plt.ion()
     plt.figure(figsize=figSize)
-    plt.axis([0, 49, 0, 15])
-    plt.plot(cores,speedup,'k-o',linewidth=linewidth)
+    plt.plot(cores_old,speedup_old,'k-o',linewidth=linewidth)
+    plt.xticks(sp.arange(0,60,10))
+    plt.axis([0, 42, 0, 25])
     plt.xlabel('Number of cores')
     plt.ylabel('Speedup')
     plt.rc('font',**font)
