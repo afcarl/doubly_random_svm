@@ -287,9 +287,9 @@ This section describes the experiments performed using a parallel, shared-memory
              \STATE \# Aggregate inverse gradients for dampening updates of $\va$
              \STATE $\vec{G}_{ii} \leftarrow \vec{G}_{ii} + \left(g^{(k)}_{ji}\right)^2$ for all $i \in\mathcal{I}^{(k)}$ and $j\in\mathcal{J}^{(k)}$
            \ENDFOR
+           \STATE \# Update weight vector 
+           \STATE $\va \leftarrow \va - \vec{G}^{-\frac{1}{2}} \sum_k \vec{g}^{(k)}$
          \ENDFOR
-         \STATE \# Update weight vector 
-         \STATE $\va \leftarrow \va - \vec{G}^{-\frac{1}{2}} \sum_k \vec{g}^{(k)}$
        \ENDWHILE
    \end{algorithmic}
  \end{algorithm}
